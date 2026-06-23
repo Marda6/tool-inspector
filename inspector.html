@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ENCY Core — Inspector</title>
+<style>
+  :root{
+    --ec-bg:#0e1010; --ec-bg-96:rgba(14,16,16,.96); --ec-bg-80:rgba(14,16,16,.80);
+    --ec-fg-100:#f5f5f5; --ec-fg-96:rgba(245,245,245,.96); --ec-fg-80:rgba(245,245,245,.80);
+    --ec-fg-72:rgba(245,245,245,.72); --ec-fg-64:rgba(245,245,245,.64); --ec-fg-56:rgba(245,245,245,.56);
+    --ec-fg-24:rgba(245,245,245,.24); --ec-fg-16:rgba(245,245,245,.16); --ec-fg-12:rgba(245,245,245,.12); --ec-fg-8:rgba(245,245,245,.08);
+    --ec-fg-4:rgba(245,245,245,.04);
+    --ec-green:#00a36d;
+    --ec-font:'Inter','Inter var',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--ec-bg);color:var(--ec-fg-72);font-family:var(--ec-font);
+    font-size:12px;line-height:16px;-webkit-font-smoothing:antialiased;}
+  img{display:block}
+
+  /* ===== Host: center the standalone inspector panel ===== */
+  .app{position:fixed;inset:0;display:flex;align-items:stretch;justify-content:center;padding:16px;}
+  .insp-host{width:341px;display:flex;flex-direction:column;min-height:0;}
+
+  .panel16{background:var(--ec-fg-16);border-radius:10px;padding:2px;display:flex;min-height:0;}
+  .panel-insp{flex:1 1 auto;gap:2px;}
+
+  /* ---- Scrollbars (thin, dark, no arrows) ---- */
+  *{scrollbar-width:thin;scrollbar-color:var(--ec-fg-16) transparent;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--ec-fg-16);border-radius:8px;
+    border:2px solid transparent;background-clip:padding-box;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--ec-fg-24);background-clip:padding-box;}
+  ::-webkit-scrollbar-button{display:none;width:0;height:0;}
+  ::-webkit-scrollbar-corner{background:transparent;}
+  .inner{background:var(--ec-bg-80);border-radius:8px;padding:4px;display:flex;flex-direction:column;
+    gap:6px;flex:1 1 0;min-height:0;overflow:hidden;}
+
+  .i16{width:16px;height:16px}
+  .line{height:1px;width:100%;background:var(--ec-fg-8);flex:0 0 1px;}
+
+  /* shared label/chevron/pair bits reused by inspector rows */
+  .shev{width:12px;height:20px;flex:0 0 12px;transition:transform .12s ease;}
+  .shev.exp{cursor:pointer;}
+  .rlabel{display:flex;align-items:center;height:20px;padding:0 2px;min-width:0;}
+  .rlabel span{color:var(--ec-fg-96);font:400 12px/16px var(--ec-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .bicn{display:flex;align-items:center;justify-content:center;padding:2px;border-radius:4px;flex:0 0 auto;}
+
+  /* ===== Inspector rail + panel (38:5163) ===== */
+  .rail{display:flex;flex-direction:column;justify-content:space-between;height:100%;width:28px;flex:0 0 28px;}
+  .rail-top{display:flex;flex-direction:column;gap:2px;width:28px;}
+  .rbtn{display:flex;align-items:center;padding:4px;border-radius:8px;cursor:pointer;}
+  .rbtn:hover{background:var(--ec-fg-4);}
+  .rbtn.active{background:var(--ec-bg-96);}
+  .ricn{width:20px;height:20px}
+  .title-row{display:flex;align-items:center;gap:4px;padding:2px 2px 2px 8px;border-radius:6px;}
+  .title-row .t{color:var(--ec-fg-96);font:600 14px/20px var(--ec-font);padding-right:8px;}
+  .title-ctl{flex:1 1 0;display:flex;justify-content:flex-end;min-width:0;gap:4px;}
+  .title-ctl .dropdown{flex:0 1 auto;max-width:300px;}
+  .irows{display:flex;flex-direction:column;gap:2px;overflow:auto;flex:1 1 0;min-height:0;}
+  .irows > *{flex:0 0 auto;}
+  .irow{display:flex;align-items:center;gap:2px;padding:2px;border-radius:6px;width:100%;cursor:pointer;}
+  .irow:hover{background:var(--ec-fg-8);}
+  .irow.sel{background:var(--ec-fg-12);}
+  .ilbl{display:flex;align-items:center;flex:1 1 0;min-width:0;}
+  .hint{width:12px;height:20px;flex:0 0 12px;visibility:hidden;}
+  .irow:hover .hint,.irow.sel .hint{visibility:visible;}
+  .itl{display:flex;align-items:center;flex:1 1 0;min-width:0;}
+  .itl.i1{padding-left:8px}.itl.i2{padding-left:16px}
+  .ictl{display:flex;align-items:center;justify-content:flex-end;gap:2px;flex:1 1 0;min-width:0;overflow:hidden;}
+  .ictl.between{justify-content:space-between;}
+  .dropdown{background:var(--ec-fg-4);display:flex;align-items:center;justify-content:space-between;
+    flex:1 1 0;min-width:0;padding:2px 2px 2px 4px;border-radius:4px;cursor:pointer;}
+  .dropdown:hover{background:var(--ec-fg-8);}
+  .dropdown.dd-open{background:var(--ec-fg-8);box-shadow:inset 0 0 0 1px var(--ec-fg-16);}
+  .dropdown .v,.input .v{color:var(--ec-fg-72);font:400 12px/16px var(--ec-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .dropdown .v{flex:1;min-width:0;}
+  .input{background:var(--ec-fg-4);display:flex;align-items:center;flex:1 1 0;min-width:0;padding:2px 2px 2px 4px;border-radius:4px;}
+  .icn11{width:12px;height:20px;flex:0 0 12px;cursor:pointer;visibility:hidden;}
+  .irow:hover .icn11,.irow.sel .icn11{visibility:visible;}
+  .tgl{width:24px;height:14px;flex:0 0 24px;cursor:pointer;}
+  .ipair{display:flex;align-items:center;gap:2px;width:85.75px;flex:0 0 85.75px;}
+  /* ---- Tool tab extras ---- */
+  .rlabel span.b{font-weight:400;}
+  .roval{flex:1 1 0;min-width:0;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);padding:2px 4px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .irow.roparam .rlabel span{color:var(--ec-fg-56);}
+  .irow .shev.exp{cursor:pointer;}
+  .irow.collapsed .shev.exp{transform:rotate(-90deg);}
+  .irows .line{margin:4px 0;}
+  .icap{padding:2px 4px 2px 28px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
+  .search-row{display:flex;padding:2px;}
+  .search-box{flex:1 1 0;padding:0;}
+  .search-box input{flex:1 1 0;min-width:0;background:transparent;border:0;outline:none;
+    color:var(--ec-fg-96);font:400 12px/16px var(--ec-font);padding:2px 8px;}
+  .search-box input::placeholder{color:var(--ec-fg-56);}
+  .ilist-item{padding:3px 6px 3px 26px;border-radius:4px;color:var(--ec-fg-72);
+    font:400 12px/16px var(--ec-font);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ilist-item:hover{background:var(--ec-fg-8);}
+  .ilist-item.sel{background:var(--ec-fg-12);color:var(--ec-fg-96);}
+  /* ---- Tool Assembly workflow ---- */
+  .tact{border:0;background:transparent;color:var(--ec-fg-72);font:400 12px/16px var(--ec-font);
+    padding:3px 8px;border-radius:4px;cursor:pointer;}
+  .tact:hover{color:var(--ec-fg-96);background:var(--ec-fg-8);}
+  .tact.apply{background:var(--ec-fg-16);color:var(--ec-fg-96);}
+  .tact.apply:hover{background:var(--ec-fg-24);}
+  .tact.ticn{padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:var(--ec-fg-72);}
+  .tact.tback{display:inline-flex;align-items:center;gap:3px;padding-left:4px;}
+  .asm-list{display:flex;flex-direction:column;padding-top:2px;}
+  .asm-list .ilist-item{padding-left:6px;} /* no hierarchy here: items align with the group heading */
+  .asm-item{display:flex;align-items:center;}
+  .asm-item .asm-name{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .asm-item .asm-cur{flex:0 0 16px;display:flex;align-items:center;justify-content:center;
+    margin-left:6px;color:var(--ec-green);}
+  .asm-item.cur{color:var(--ec-fg-100);}
+  .asm-item.cur .dd-pre{color:var(--ec-green);}
+  .asm-item.active{background:var(--ec-fg-12);box-shadow:inset 0 0 0 1px var(--ec-fg-16);}
+  .ref-head{padding:6px 6px 2px 28px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
+  .opitem{display:flex;align-items:center;gap:8px;padding:2px 6px 2px 28px;color:var(--ec-fg-56);
+    font:400 12px/16px var(--ec-font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .opitem .op-dot{flex:0 0 4px;width:4px;height:4px;border-radius:50%;background:var(--ec-fg-24);}
+  .opitem .op-name{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .tool-sel{display:flex;align-items:center;gap:4px;padding:2px;}
+  .spark{flex:0 0 24px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+    border:0;border-radius:4px;background:var(--ec-green);color:#0e1010;cursor:pointer;}
+  .spark:hover{filter:brightness(1.1);}
+  .selbox{flex:1 1 0;min-width:0;min-height:24px;}
+  .selbox .movh{display:flex;align-items:center;justify-content:center;color:var(--ec-fg-56);flex:0 0 16px;margin-right:2px;}
+  .edittool{flex:0 0 24px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;
+    border:0;border-radius:4px;background:var(--ec-fg-8);color:var(--ec-fg-72);cursor:pointer;}
+  .edittool:hover{background:var(--ec-fg-16);color:var(--ec-fg-96);}
+  /* read-only applies ONLY to lockable rows (Tool/Adapter); Station block always editable */
+  .irows.ro .lockable .dropdown{pointer-events:none;background:transparent;}
+  .irows.ro .lockable .dropdown .v{color:var(--ec-fg-56);}
+  .irows.ro .lockable .dropdown .i16{display:none;}
+  .irows.ro .lockable .rowbtn{display:none;}
+  .ictl .duo-a{flex:1 1 0;min-width:0;}
+  .ictl .duo-b{flex:0 0 52px;}
+  .rowbtn{flex:0 0 20px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+    border:0;border-radius:4px;background:transparent;color:var(--ec-fg-56);cursor:pointer;padding:0;}
+  .rowbtn:hover{background:var(--ec-fg-8);color:var(--ec-fg-96);}
+  .rowbtn.on{background:var(--ec-fg-12);color:var(--ec-fg-96);}
+
+  .dd-menu{position:fixed;z-index:1000;background:var(--ec-bg-96);border:1px solid var(--ec-fg-12);
+    border-radius:4px;padding:2px;display:flex;flex-direction:column;gap:1px;
+    box-shadow:0 6px 20px rgba(0,0,0,.5);}
+  .dd-opt{padding:4px 6px;border-radius:3px;color:var(--ec-fg-72);font:400 12px/16px var(--ec-font);
+    cursor:pointer;white-space:nowrap;}
+  .dd-opt:hover{background:var(--ec-fg-8);color:var(--ec-fg-96);}
+  .dd-opt.cur{color:var(--ec-fg-100);}
+  .dd-sep{height:1px;background:var(--ec-fg-12);margin:2px 0;}
+  .dd-head{padding:5px 6px 2px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
+  .dd-pre{display:inline-block;min-width:28px;margin-right:6px;color:var(--ec-fg-56);
+    font-variant-numeric:tabular-nums;}
+  .dd-sw{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:-2px;}
+
+  /* ===== Light theme — чистая инверсия базовых цветов токенов ===== */
+  [data-theme="light"]{
+    --ec-bg:#f5f5f5; --ec-bg-96:rgba(245,245,245,.96); --ec-bg-80:rgba(245,245,245,.80);
+    --ec-fg-100:#0e1010; --ec-fg-96:rgba(14,16,16,.96); --ec-fg-80:rgba(14,16,16,.80);
+    --ec-fg-72:rgba(14,16,16,.72); --ec-fg-64:rgba(14,16,16,.64); --ec-fg-56:rgba(14,16,16,.56);
+    --ec-fg-24:rgba(14,16,16,.24); --ec-fg-16:rgba(14,16,16,.16); --ec-fg-12:rgba(14,16,16,.12); --ec-fg-8:rgba(14,16,16,.08);
+    --ec-fg-4:rgba(14,16,16,.04);
+    /* --ec-green не меняется */
+  }
+  /* монохромные иконки (#f5f5f5) → инверсия под светлый фон; включённый (зелёный) тогл — исключение */
+  [data-theme="light"] .app img{filter:invert(1);}
+  [data-theme="light"] .app .tgl.on{filter:none;}
+
+  /* кнопка переключения темы в рейке (инлайн-svg на currentColor) */
+  .rbtn .theme-ic{width:20px;height:20px;display:grid;place-items:center;color:var(--ec-fg-80);}
+  .rbtn:hover .theme-ic{color:var(--ec-fg-96);}
+  .theme-ic svg{width:20px;height:20px;display:block;}
+  .theme-ic .ic-sun{display:none;}
+  [data-theme="light"] .theme-ic .ic-moon{display:none;}
+  [data-theme="light"] .theme-ic .ic-sun{display:block;}
+
+  #assetbank{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="insp-host">
+
+    <!-- ===== INSPECTOR PANEL (38:5163) ===== -->
+    <section class="panel16 panel-insp">
+      <div class="rail">
+        <div class="rail-top">
+          <div class="rbtn" data-tab="Setup" title="Setup"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pbnNfc2V0dXAiPgo8ZyBpZD0iR3JvdXAgNTcyIj4KPGcgaWQ9Ikdyb3VwIDE5NCI+CjxwYXRoIGlkPSJFbGxpcHNlIDg0IiBkPSJNMTAgM0M5LjA4MDc1IDMgOC4xNzA1IDMuMTgxMDYgNy4zMjEyMiAzLjUzMjg0QzYuNDcxOTQgMy44ODQ2MyA1LjcwMDI2IDQuNDAwMjQgNS4wNTAyNSA1LjA1MDI1QzQuNDAwMjQgNS43MDAyNiAzLjg4NDYzIDYuNDcxOTQgMy41MzI4NCA3LjMyMTIyQzMuMTgxMDYgOC4xNzA1IDMgOS4wODA3NSAzIDEwSDEwTDEwIDNaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPHBhdGggaWQ9IkVsbGlwc2UgODUiIGQ9Ik0xMCAxN0MxMC45MTkzIDE3IDExLjgyOTUgMTYuODE4OSAxMi42Nzg4IDE2LjQ2NzJDMTMuNTI4MSAxNi4xMTU0IDE0LjI5OTcgMTUuNTk5OCAxNC45NDk3IDE0Ljk0OTdDMTUuNTk5OCAxNC4yOTk3IDE2LjExNTQgMTMuNTI4MSAxNi40NjcyIDEyLjY3ODhDMTYuODE4OSAxMS44Mjk1IDE3IDEwLjkxOTMgMTcgMTBIMTBMMTAgMTdaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPHBhdGggaWQ9IkVsbGlwc2UgODIiIGQ9Ik0xNyA5Ljk5OTk4QzE3IDkuMDgwNzIgMTYuODE4OSA4LjE3MDQ3IDE2LjQ2NzIgNy4zMjExOUMxNi4xMTU0IDYuNDcxOTEgMTUuNTk5OCA1LjcwMDI0IDE0Ljk0OTcgNS4wNTAyM0MxNC4yOTk3IDQuNDAwMjIgMTMuNTI4MSAzLjg4NDYgMTIuNjc4OCAzLjUzMjgyQzExLjgyOTUgMy4xODEwNCAxMC45MTkzIDIuOTk5OTggMTAgMi45OTk5OEwxMCA5Ljk5OTk4SDE3WiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjQ4Ii8+CjxwYXRoIGlkPSJFbGxpcHNlIDgzIiBkPSJNMyAxMEMzIDEwLjkxOTMgMy4xODEwNiAxMS44Mjk1IDMuNTMyODQgMTIuNjc4OEMzLjg4NDYzIDEzLjUyODEgNC40MDAyNCAxNC4yOTk3IDUuMDUwMjUgMTQuOTQ5N0M1LjcwMDI2IDE1LjU5OTggNi40NzE5NCAxNi4xMTU0IDcuMzIxMjIgMTYuNDY3MkM4LjE3MDUgMTYuODE4OSA5LjA4MDc1IDE3IDEwIDE3TDEwIDEwSDNaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuNDgiLz4KPC9nPgo8L2c+CjwvZz4KPC9nPgo8L3N2Zz4K" alt=""></div>
+          <div class="rbtn active" data-tab="Tool" title="Tool"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pY25fdG9vbCI+CjxnIGlkPSJWZWN0b3IiPgo8cGF0aCBkPSJNMTIgMTAuNjA1N0MxMiAxMC40OTE1IDExLjk3MzMgMTAuMzc4OSAxMS45MjIyIDEwLjI3NjhDMTEuNzA3NyA5Ljg0ODk1IDExLjE0NzMgOS43MzYwNSAxMC43ODMyIDEwLjA0NzRMOC4zNDkyMSAxMi4xMjg4QzguMTI3NTYgMTIuMzE4MyA4IDEyLjU5NSA4IDEyLjg4NjJWMTMuMTk4N0M4IDEzLjM0NjcgOC4wNDEzIDEzLjQ5MTcgOC4xMTkyNiAxMy42MTc1QzguMzc5NzkgMTQuMDM4IDguOTU3MzMgMTQuMTIyNSA5LjMyNzk4IDEzLjc5NDVMMTEuNjYzNiAxMS43Mjc0QzExLjg3NzUgMTEuNTM4MSAxMiAxMS4yNjY0IDEyIDEwLjk4MTFWMTAuNjA1N1oiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC45NiIvPgo8cGF0aCBkPSJNMTIgMy45OTc2NEMxMiAzLjQ0NjY2IDExLjU1MjMgMyAxMSAzSDlDOC40NDc3MSAzIDggMy40NDY2NiA4IDMuOTk3NjRWOS4yMDgxN0M4IDkuMzU2MSA4LjA0MTMgOS41MDExMSA4LjExOTI3IDkuNjI2OTRDOC4zNzk4MSAxMC4wNDc0IDguOTU3MzQgMTAuMTMyIDkuMzI3OTkgOS44MDM5MkwxMS42NjM2IDcuNzM2ODhDMTEuODc3NiA3LjU0NzU0IDEyIDcuMjc1ODggMTIgNi45OTA1N1YzLjk5NzY0WiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjk2Ii8+CjxwYXRoIGQ9Ik0xMiAxNC41OTYzQzEyIDE0LjQ4MjEgMTEuOTczMyAxNC4zNjk1IDExLjkyMjIgMTQuMjY3NEMxMS43MDc3IDEzLjgzOTUgMTEuMTQ3MyAxMy43MjY2IDEwLjc4MzIgMTQuMDM3OUw4LjgxOTkgMTUuNzE2OEM4LjM3NzYzIDE2LjA5NSA4LjM1MTY5IDE2Ljc2ODggOC43NjM1OSAxNy4xNzk3TDkuMjkyODkgMTcuNzA3OEM5LjY4MzQxIDE4LjA5NzQgMTAuMzE2NiAxOC4wOTc0IDEwLjcwNzEgMTcuNzA3OEwxMS43MDcxIDE2LjcxMDJDMTEuODk0NiAxNi41MjMxIDEyIDE2LjI2OTMgMTIgMTYuMDA0N1YxNC41OTYzWiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjk2Ii8+CjwvZz4KPGcgaWQ9IlZlY3Rvcl8yIj4KPHBhdGggZD0iTTE2IDkuMzAyM0MxNiA5LjI0NTIxIDE1Ljk4NjcgOS4xODg5MSAxNS45NjExIDkuMTM3ODVDMTUuODUzOSA4LjkyMzg3IDE1LjU3MzcgOC44Njc0MSAxNS4zOTE2IDkuMDIzMUwxNC4xNzQ2IDEwLjA2NEMxNC4wNjM4IDEwLjE1ODcgMTQgMTAuMjk3MSAxNCAxMC40NDI3VjEwLjU5OUMxNCAxMC42NzMgMTQuMDIwNiAxMC43NDU1IDE0LjA1OTYgMTAuODA4NEMxNC4xODk5IDExLjAxODcgMTQuNDc4NyAxMS4wNjEgMTQuNjY0IDEwLjg5NjlMMTUuODMxOCA5Ljg2MzI2QzE1LjkzODggOS43Njg1OCAxNiA5LjYzMjczIDE2IDkuNDkwMDVWOS4zMDIzWiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjQ4Ii8+CjxwYXRoIGQ9Ik0xNiA1LjQ5ODg5QzE2IDUuMjIzMzYgMTUuNzc2MSA1IDE1LjUgNUgxNC41QzE0LjIyMzkgNSAxNCA1LjIyMzM2IDE0IDUuNDk4ODlWOC42MDM0NEMxNCA4LjY3NzQxIDE0LjAyMDYgOC43NDk5MyAxNC4wNTk2IDguODEyODVDMTQuMTg5OSA5LjAyMzExIDE0LjQ3ODcgOS4wNjU0IDE0LjY2NCA4LjkwMTM2TDE1LjgzMTggNy44Njc2OEMxNS45Mzg4IDcuNzczIDE2IDcuNjM3MTUgMTYgNy40OTQ0N1Y1LjQ5ODg5WiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjQ4Ii8+CjxwYXRoIGQ9Ik0xNiAxMS4yOTc5QzE2IDExLjI0MDggMTUuOTg2NyAxMS4xODQ1IDE1Ljk2MTEgMTEuMTMzNEMxNS44NTM5IDEwLjkxOTUgMTUuNTczNyAxMC44NjMgMTUuMzkxNiAxMS4wMTg3TDE0LjQxIDExLjg1ODJDMTQuMTg4OCAxMi4wNDc0IDE0LjE3NTggMTIuMzg0MyAxNC4zODE4IDEyLjU4OThMMTQuNjQ2NCAxMi44NTM5QzE0Ljg0MTcgMTMuMDQ4NyAxNS4xNTgzIDEzLjA0ODcgMTUuMzUzNSAxMi44NTM5TDE1Ljg1MzUgMTIuMzU1QzE1Ljk0NzMgMTIuMjYxNCAxNiAxMi4xMzQ1IDE2IDEyLjAwMjJWMTEuMjk3OVoiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC40OCIvPgo8L2c+CjxnIGlkPSJWZWN0b3JfMyI+CjxwYXRoIGQ9Ik01Ljk5OTk5IDkuMzAyM0M1Ljk5OTk5IDkuMjQ1MjEgNS45ODY2NyA5LjE4ODkxIDUuOTYxMDkgOS4xMzc4NUM1Ljg1Mzg2IDguOTIzODcgNS41NzM2NSA4Ljg2NzQxIDUuMzkxNjEgOS4wMjMxTDQuMTc0NiAxMC4wNjRDNC4wNjM3OCAxMC4xNTg3IDQgMTAuMjk3MSA0IDEwLjQ0MjdWMTAuNTk5QzQgMTAuNjczIDQuMDIwNjUgMTAuNzQ1NSA0LjA1OTYzIDEwLjgwODRDNC4xODk5IDExLjAxODcgNC40Nzg2NiAxMS4wNjEgNC42NjM5OSAxMC44OTY5TDUuODMxOCA5Ljg2MzI2QzUuOTM4NzcgOS43Njg1OCA1Ljk5OTk5IDkuNjMyNzMgNS45OTk5OSA5LjQ5MDA1VjkuMzAyM1oiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC40OCIvPgo8cGF0aCBkPSJNNiA1LjQ5ODg5QzYgNS4yMjMzNiA1Ljc3NjE0IDUgNS41IDVINC41QzQuMjIzODYgNSA0IDUuMjIzMzYgNCA1LjQ5ODg5VjguNjAzNDRDNCA4LjY3NzQxIDQuMDIwNjUgOC43NDk5MyA0LjA1OTYzIDguODEyODVDNC4xODk5IDkuMDIzMTEgNC40Nzg2NyA5LjA2NTQgNC42NjQgOC45MDEzNkw1LjgzMTgxIDcuODY3NjhDNS45Mzg3OCA3Ljc3MyA2IDcuNjM3MTUgNiA3LjQ5NDQ3VjUuNDk4ODlaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuNDgiLz4KPHBhdGggZD0iTTUuOTk5OTkgMTEuMjk3OUM1Ljk5OTk5IDExLjI0MDggNS45ODY2NyAxMS4xODQ1IDUuOTYxMDkgMTEuMTMzNEM1Ljg1Mzg2IDEwLjkxOTUgNS41NzM2NSAxMC44NjMgNS4zOTE2MSAxMS4wMTg3TDQuNDA5OTUgMTEuODU4MkM0LjE4ODgxIDEyLjA0NzQgNC4xNzU4NCAxMi4zODQzIDQuMzgxNzkgMTIuNTg5OEw0LjY0NjQ0IDEyLjg1MzlDNC44NDE3MSAxMy4wNDg3IDUuMTU4MjkgMTMuMDQ4NyA1LjM1MzU1IDEyLjg1MzlMNS44NTM1NSAxMi4zNTVDNS45NDczMSAxMi4yNjE0IDUuOTk5OTkgMTIuMTM0NSA1Ljk5OTk5IDEyLjAwMjJWMTEuMjk3OVoiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC40OCIvPgo8L2c+CjwvZz4KPC9nPgo8L3N2Zz4K" alt=""></div>
+          <div class="rbtn" data-tab="Speeds" title="Speeds"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pY25fc3BlZWRzIj4KPGcgaWQ9IlZlY3RvciI+CjxwYXRoIGQ9Ik0xMyAzTDYgMTBIMTFMMTMgM1oiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC45NiIvPgo8cGF0aCBkPSJNNyAxN0wxNCAxMEg5TDcgMTdaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPC9nPgo8L2c+CjwvZz4KPC9zdmc+Cg==" alt=""></div>
+          <div class="rbtn" data-tab="Strategy" title="Strategy"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pY25fc3RyYXRlZ3kiPgo8cGF0aCBpZD0iU3VidHJhY3QiIGQ9Ik0xNC45Njg4IDUuMDcwMzFDMTYuMjI0IDYuMzM1NDggMTcgOC4wNzY5NSAxNyAxMEMxNyAxMy44NjYgMTMuODY2IDE3IDEwIDE3QzguMDc3MTUgMTcgNi4zMzU0NSAxNi4yMjQ4IDUuMDcwMzEgMTQuOTY5N0wxMiAxMkwxNC45Njg4IDUuMDcwMzFaTTEwIDNDMTEuOTIyNiAzIDEzLjY2MzYgMy43NzU1NSAxNC45Mjg3IDUuMDMwMjdMOCA4TDUuMDI5MyAxNC45Mjg3QzMuNzc0OTEgMTMuNjYzNiAzIDExLjkyMjMgMyAxMEMzLjAwMDA1IDYuMTM0MDEgNi4xMzQwNCAzIDEwIDNaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPGNpcmNsZSBpZD0iRWxsaXBzZSA4OTciIGN4PSIxMCIgY3k9IjEwIiByPSIxIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPC9nPgo8L2c+Cjwvc3ZnPgo=" alt=""></div>
+          <div class="rbtn" data-tab="Fixture" title="Fixture"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pY25fZml4dHVyZSI+CjxwYXRoIGlkPSJSZWN0YW5nbGUgNjA5MCIgZD0iTTMgMTVMMTcgMTVWMTZDMTcgMTYuNTUyMyAxNi41NTIzIDE3IDE2IDE3TDQgMTdDMy40NDc3MiAxNyAzIDE2LjU1MjMgMyAxNkwzIDE1WiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjk2Ii8+CjxwYXRoIGlkPSJSZWN0YW5nbGUgNjA5MyIgZD0iTTMgOEMzIDcuNDQ3NzIgMy40NDc3MiA3IDQgN0M0LjU1MjI4IDcgNSA3LjQ0NzcyIDUgOEw1IDE0TDMgMTRMMyA4WiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjk2Ii8+CjxwYXRoIGlkPSJSZWN0YW5nbGUgNjA5NCIgZD0iTTE1IDhDMTUgNy40NDc3MiAxNS40NDc3IDcgMTYgN0MxNi41NTIzIDcgMTcgNy40NDc3MiAxNyA4TDE3IDE0TDE1IDE0TDE1IDhaIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPHBhdGggaWQ9IlJlY3RhbmdsZSA2MDkxIiBkPSJNNiA2LjVDNiA2LjIyMzg2IDYuMjIzODYgNiA2LjUgNkM2Ljc3NjE0IDYgNyA2LjIyMzg2IDcgNi41TDcgMTJDNyAxMi41NTIzIDYuNTUyMjggMTMgNiAxM0w2IDYuNVoiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC45NiIvPgo8cGF0aCBpZD0iUmVjdGFuZ2xlIDYwOTIiIGQ9Ik0xMyA2LjVDMTMgNi4yMjM4NiAxMy4yMjM5IDYgMTMuNSA2QzEzLjc3NjEgNiAxNCA2LjIyMzg2IDE0IDYuNUwxNCAxM0MxMy40NDc3IDEzIDEzIDEyLjU1MjMgMTMgMTJMMTMgNi41WiIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjk2Ii8+CjxyZWN0IGlkPSJSZWN0YW5nbGUgNjA5NSIgeD0iOCIgeT0iMyIgd2lkdGg9IjQiIGhlaWdodD0iOCIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjQ4Ii8+CjwvZz4KPC9nPgo8L3N2Zz4K" alt=""></div>
+          <div class="rbtn" data-tab="Links" title="Links"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pbmNfbGlua3MiPgo8cGF0aCBpZD0iUmVjdGFuZ2xlIDYwNzciIGQ9Ik02IDdMOSAxMUgzTDYgN1oiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC45NiIvPgo8cGF0aCBpZD0iUmVjdGFuZ2xlIDYwODAiIGQ9Ik0xNCAxN0wxNyAxM0gxMUwxNCAxN1oiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC45NiIvPgo8cGF0aCBpZD0iVmVjdG9yIDIzNjIiIGQ9Ik0xNCAxMkwxNCA2QzE0IDQuODk1NDMgMTMuMTA0NiA0IDEyIDRMOCA0QzYuODk1NDMgNCA2IDQuODk1NDMgNiA2TDYgOU02IDE3TDYgMTIiIHN0cm9rZT0iI0Y1RjVGNSIgc3Ryb2tlLW9wYWNpdHk9IjAuNDgiIHN0cm9rZS13aWR0aD0iMiIvPgo8L2c+CjwvZz4KPC9zdmc+Cg==" alt=""></div>
+        </div>
+        <div class="rail-top">
+          <div class="rbtn" id="themeBtn" title="Переключить тему">
+            <span class="theme-ic">
+              <svg class="ic-moon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 11.8A6.5 6.5 0 0 1 8.2 4a6.5 6.5 0 1 0 7.8 7.8Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>
+              <svg class="ic-sun" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="3.25" stroke="currentColor" stroke-width="1.25"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+          <div class="rbtn" data-tab="More" title="More"><img class="ricn" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgaWQ9Imljbl9pbnNwZWN0b3IiPgo8ZyBpZD0iUHJvcGVydHkgMT1pY25fbW9yZSI+CjxyZWN0IGlkPSJSZWN0YW5nbGUgOTAxNCIgd2lkdGg9IjUiIGhlaWdodD0iNSIgcng9IjIuNSIgdHJhbnNmb3JtPSJtYXRyaXgoMSAwIDAgLTEgMTEgMTYpIiBmaWxsPSIjRjVGNUY1IiBmaWxsLW9wYWNpdHk9IjAuNDgiLz4KPHJlY3QgaWQ9IlJlY3RhbmdsZSA5MDE1IiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiByeD0iMSIgdHJhbnNmb3JtPSJtYXRyaXgoMSAwIDAgLTEgNCA5KSIgZmlsbD0iI0Y1RjVGNSIgZmlsbC1vcGFjaXR5PSIwLjQ4Ii8+CjxwYXRoIGlkPSJWZWN0b3IgMjMyMyIgZD0iTTExIDYuNUgxNk0xMy41IDlWNCIgc3Ryb2tlPSIjRjVGNUY1IiBzdHJva2Utb3BhY2l0eT0iMC45NiIgc3Ryb2tlLXdpZHRoPSIxLjI1Ii8+CjxwYXRoIGlkPSJWZWN0b3IgMjMyNCIgZD0iTTguNzc5MDMgMTIuOTY2NUw3LjAzMzQ3IDExLjIyMUM2Ljg5MTk5IDExLjA3OTUgNi43MDAwOSAxMSA2LjUgMTFDNi4yOTk5MSAxMSA2LjEwODAxIDExLjA3OTUgNS45NjY1MyAxMS4yMjFMNC4yMjA5NyAxMi45NjY1QzQuMDc5NDkgMTMuMTA4IDQgMTMuMjk5OSA0IDEzLjVDNCAxMy43MDAxIDQuMDc5NDkgMTMuODkyIDQuMjIwOTcgMTQuMDMzNUw1Ljk2NjUzIDE1Ljc3OUM2LjEwODAxIDE1LjkyMDUgNi4yOTk5MSAxNiA2LjUgMTZDNi43MDAwOSAxNiA2Ljg5MTk5IDE1LjkyMDUgNy4wMzM0NyAxNS43NzlMOC43NzkwMyAxNC4wMzM1QzguOTIwNTEgMTMuODkyIDkgMTMuNzAwMSA5IDEzLjVDOSAxMy4yOTk5IDguOTIwNTEgMTMuMTA4IDguNzc5MDMgMTIuOTY2NVoiIGZpbGw9IiNGNUY1RjUiIGZpbGwtb3BhY2l0eT0iMC45NiIvPgo8L2c+CjwvZz4KPC9zdmc+Cg==" alt=""></div>
+        </div>
+      </div>
+
+      <div class="inner">
+        <div class="title-row"><span class="t" id="inspTitle">Tool</span><span class="title-ctl" id="titleCtl"></span></div>
+        <div class="line"></div>
+        <div class="irows" id="irows"></div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- asset bank: exposes SVGs to JS as data URIs after build -->
+<div id="assetbank">
+  <img id="a-hint" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDEyIDIwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iaGludF9oMjAiPgo8cGF0aCBpZD0iVmVjdG9yIiBkPSJNNiAxM1YxNU02IDExVjYiIHN0cm9rZT0idmFyKC0tc3Ryb2tlLTAsICNGNUY1RjUpIiBzdHJva2Utb3BhY2l0eT0iMC4yIiBzdHJva2Utd2lkdGg9IjIiLz4KPC9nPgo8L3N2Zz4K" alt="">
+  <img id="a-icn11" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDEyIDIwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iYnV0dG9uX2ljbl8xMSI+CjxwYXRoIGlkPSJWZWN0b3IiIGQ9Ik02IDEyVjE0TTYgMTFWOU02IDZWOCIgc3Ryb2tlPSJ2YXIoLS1zdHJva2UtMCwgI0Y1RjVGNSkiIHN0cm9rZS1vcGFjaXR5PSIwLjIiIHN0cm9rZS13aWR0aD0iMiIvPgo8L2c+Cjwvc3ZnPgo=" alt="">
+  <img id="a-ddchev" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDE2IDE2IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iRnJhbWUgNCI+CjxwYXRoIGlkPSJWZWN0b3IgMjM1NCIgZD0iTTUgNi41TDggOS41TDExIDYuNSIgc3Ryb2tlPSJ2YXIoLS1zdHJva2UtMCwgI0Y1RjVGNSkiIHN0cm9rZS1vcGFjaXR5PSIwLjU2Ii8+CjwvZz4KPC9zdmc+Cg==" alt="">
+  <img id="a-shev-open" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDEyIDIwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iU2hldnJvbiI+CjxwYXRoIGlkPSJWZWN0b3IgMjM1NCIgZD0iTTMgOC41TDYgMTEuNUw5IDguNSIgc3Ryb2tlPSJ2YXIoLS1zdHJva2UtMCwgI0Y1RjVGNSkiIHN0cm9rZS1vcGFjaXR5PSIwLjU2Ii8+CjwvZz4KPC9zdmc+Cg==" alt="">
+  <img id="a-shev-leaf" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDEyIDIwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iU2hldnJvbiI+CjwvZz4KPC9zdmc+Cg==" alt="">
+  <img id="a-shev-right" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDEyIDIwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iU2hldnJvbiI+CjxwYXRoIGlkPSJWZWN0b3IgMjM1NCIgZD0iTTQuNSAxM0w3LjUgMTBMNC41IDciIHN0cm9rZT0idmFyKC0tc3Ryb2tlLTAsICNGNUY1RjUpIiBzdHJva2Utb3BhY2l0eT0iMC41NiIvPgo8L2c+Cjwvc3ZnPgo=" alt="">
+  <img id="a-tgl-off" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDI0IDE0IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0idG9vZ2xlIj4KPHJlY3QgaWQ9IlJlY3RhbmdsZSAzODA1IiB3aWR0aD0iMjQiIGhlaWdodD0iMTQiIHJ4PSI3IiBmaWxsPSJ2YXIoLS1maWxsLTAsICNGNUY1RjUpIiBmaWxsLW9wYWNpdHk9IjAuMjQiLz4KPGNpcmNsZSBpZD0iRWxsaXBzZSA2MjMiIGN4PSI3IiBjeT0iNyIgcj0iNSIgZmlsbD0idmFyKC0tZmlsbC0wLCAjMEUxMDEwKSIgZmlsbC1vcGFjaXR5PSIwLjk2Ii8+CjwvZz4KPC9zdmc+Cg==" alt="">
+  <img id="a-tgl-on" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDI0IDE0IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0idG9vZ2xlIj4KPHJlY3QgaWQ9IlJlY3RhbmdsZSAzODA1IiB3aWR0aD0iMjQiIGhlaWdodD0iMTQiIHJ4PSI3IiBmaWxsPSJ2YXIoLS1maWxsLTAsICMwMEEzN0MpIi8+CjxjaXJjbGUgaWQ9IkVsbGlwc2UgNjIzIiBjeD0iMTciIGN5PSI3IiByPSI1IiBmaWxsPSJ2YXIoLS1maWxsLTAsICMwRTEwMTApIiBmaWxsLW9wYWNpdHk9IjAuOTYiLz4KPC9nPgo8L3N2Zz4K" alt="">
+  <img id="a-row-a" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDE2IDE2IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iSWNuIj4KPGNpcmNsZSBpZD0iRWxsaXBzZSAxIiBjeD0iOCIgY3k9IjgiIHI9IjQuNSIgc3Ryb2tlPSJ2YXIoLS1zdHJva2UtMCwgI0Y1RjVGNSkiIHN0cm9rZS1vcGFjaXR5PSIwLjY0Ii8+CjwvZz4KPC9zdmc+Cg==" alt="">
+  <img id="a-row-b" src="data:image/svg+xml;base64,PHN2ZyBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBvdmVyZmxvdz0idmlzaWJsZSIgc3R5bGU9ImRpc3BsYXk6IGJsb2NrOyIgdmlld0JveD0iMCAwIDE2IDE2IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBpZD0iSWNuIj4KPHBhdGggaWQ9IkVsbGlwc2UgMSIgZD0iTTYuOTM5NDUgMy43Njc1OEM3LjUyNTIgMy4xODE5OSA4LjQ3NDggMy4xODE5OSA5LjA2MDU1IDMuNzY3NThMMTIuMjMyNCA2LjkzOTQ1QzEyLjgxOCA3LjUyNTIgMTIuODE4IDguNDc0OCAxMi4yMzI0IDkuMDYwNTVMOS4wNjA1NSAxMi4yMzI0QzguNDc0OCAxMi44MTggNy41MjUyIDEyLjgxOCA2LjkzOTQ1IDEyLjIzMjRMMy43Njc1OCA5LjA2MDU1QzMuMTgxOTkgOC40NzQ4IDMuMTgxOTkgNy41MjUyIDMuNzY3NTggNi45Mzk0NUw2LjkzOTQ1IDMuNzY3NThaIiBzdHJva2U9InZhcigtLXN0cm9rZS0wLCAjRjVGNUY1KSIgc3Ryb2tlLW9wYWNpdHk9IjAuNjQiLz4KPC9nPgo8L3N2Zz4K" alt="">
+</div>
+
+<script>
+(function(){
+  var A = {}; // asset data-URIs by key
+  ['hint','icn11','ddchev','shev-open','shev-leaf','shev-right',
+   'tgl-off','tgl-on','row-a','row-b'].forEach(function(k){
+    var el = document.getElementById('a-'+k); A[k] = el ? el.src : '';
+  });
+
+  /* ---------- Popover helper (dropdown menu & context menu) ---------- */
+  var openMenu = null;
+  function closeMenu(){
+    if(openMenu){ if(openMenu._owner) openMenu._owner.classList.remove('dd-open'); openMenu.remove(); openMenu = null; }
+  }
+  function showMenu(anchorRect, items, owner, minW){
+    closeMenu();
+    var menu = document.createElement('div'); menu.className = 'dd-menu'; menu._owner = owner || null;
+    items.forEach(function(it){
+      if(it.sep){ var s=document.createElement('div'); s.className='dd-sep'; menu.appendChild(s); return; }
+      if(it.head){ var h=document.createElement('div'); h.className='dd-head'; h.textContent=it.head; menu.appendChild(h); return; }
+      var o = document.createElement('div');
+      o.className = 'dd-opt' + (it.cur ? ' cur' : '');
+      if(it.pre){ var pr = document.createElement('span'); pr.className = 'dd-pre'; pr.textContent = it.pre; o.appendChild(pr); }
+      if(it.color){ var sw = document.createElement('span'); sw.className = 'dd-sw'; sw.style.background = it.color; o.appendChild(sw); }
+      if(it.pre || it.color){ o.appendChild(document.createTextNode(it.label)); }
+      else { o.textContent = it.label; }
+      o.addEventListener('click', function(ev){ ev.stopPropagation(); if(it.onPick) it.onPick(); closeMenu(); });
+      menu.appendChild(o);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = anchorRect.left + 'px';
+    menu.style.top = (anchorRect.bottom + 2) + 'px';
+    if(minW) menu.style.minWidth = minW + 'px';
+    if(owner) owner.classList.add('dd-open');
+    openMenu = menu;
+    return menu;
+  }
+  document.addEventListener('click', closeMenu);
+  window.addEventListener('resize', closeMenu);
+
+  /* ---------- Inspector content: option lists + PARAMS ---------- */
+  /* realistic option lists for the Tool tab (turning / ISO catalog) */
+  var STATION_OPTS    = ['Turret', 'Lower turret', 'Spindle', 'Sub-spindle', 'Gang slide'];
+  var POSITION_OPTS   = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+  var CORRECTOR_OPTS  = ['Auto','1','2','3','4','5','6','7','8','9','10','11','12'];
+  var ORIENT_OPTS     = ['Axial', 'Radial', 'Angular', 'Back-turning'];
+  var INSERT_OPTS     = ['CNMG 12 04 08-WF', 'DNMG 15 06 08-PM', 'VNMG 16 04 08-MF', 'WNMG 08 04 08-PM', 'TNMG 16 04 08-PM', 'SNMG 12 04 08-PR'];
+  var HOLDER_OPTS     = ['DCLNR 2020K 12', 'PCLNR 2525M 12', 'MCLNR 2020K 12', 'SVJBR 2020K 16', 'DDJNR 2020K 15', 'A25T-DCLNR 12'];
+  var TOOLTYPE_OPTS   = ['External turning', 'Internal turning', 'Face turning', 'Grooving', 'Threading', 'Parting / Cut-off'];
+  var HOLDERTYPE_OPTS = ['Any', 'L — Left hand', 'R — Right hand', 'N — Neutral'];
+  var INSERTTYPE_OPTS = ['Any', 'C — 80° rhombic', 'D — 55° rhombic', 'V — 35° rhombic', 'W — 80° trigon', 'T — 60° triangle', 'S — square'];
+  var HANDTYPE_OPTS   = ['Right (R)', 'Left (L)', 'Neutral (N)'];
+  var PARAMS = {
+    Setup: [
+      {label:'Coordinate system', ctl:'dropdown', val:'World'},
+      {label:'Origin X', ctl:'input', val:'000.000', indent:1},
+      {label:'Clearance', ctl:'toggleInput', on:false, val:'010.000', indent:2, shev:'leaf', sel:true},
+      {label:'Axis mode', ctl:'pair', shev:'right'},
+      {label:'Stock', ctl:'dropdown', val:'From solid', indent:1, shev:'right'},
+      {label:'Orientation', ctl:'dropdown', val:'Z up', indent:1},
+      {label:'Top height', ctl:'dropdown', val:'Model top', indent:2, shev:'leaf'},
+      {label:'Flip Z', ctl:'toggle', on:true, indent:2, shev:'leaf'},
+      {label:'Safe Z', ctl:'input', val:'025.000', indent:2, shev:'leaf'},
+      {label:'Rapid Z', ctl:'input', val:'005.000', indent:2, shev:'leaf'}
+    ],
+    Tool: {
+      head:'CNMG-12 04 08-WF/DCLNR-2020K-12',
+      /* read-only / edit-assembly content — assembly composition (concept) */
+      assembly:[
+        {label:'Station', ctl:'duo', val:'Turret', val2:'8', nomore:true, opts:STATION_OPTS, opts2:POSITION_OPTS},
+        {label:'Corrector', ctl:'dropdown', val:'Auto', nomore:true, opts:CORRECTOR_OPTS},
+        {label:'Corrector 2', ctl:'dropdown', val:'Auto', nomore:true, opts:CORRECTOR_OPTS},
+        {label:'Orientation', ctl:'dropdown', val:'Axial', shev:'open', ghead:'orient', nomore:true, opts:ORIENT_OPTS},
+        {label:'Opposite spindle', ctl:'toggle', on:false, indent:1, gchild:'orient', nomore:true},
+        {type:'divider'},
+        {label:'Tool', ctl:'dropdown', val:'CNMG 12 04 08-WF', shev:'open', ghead:'tool', editBtn:'compTool', lock:true, opts:INSERT_OPTS},
+        {label:'Diameter', ctl:'readonly', val:'12.7 mm', indent:1, gchild:'tool', nomore:true},
+        {label:'Length (L)', ctl:'readonly', val:'12.9 mm', indent:1, gchild:'tool', nomore:true},
+        {label:'Working length (WL)', ctl:'readonly', val:'4.0 mm', indent:1, gchild:'tool', nomore:true},
+        {label:'Adapter', ctl:'dropdown', val:'DCLNR 2020K 12', shev:'open', ghead:'adapter', editBtn:'compAdapter', lock:true, opts:HOLDER_OPTS},
+        {label:'Holder length', ctl:'readonly', val:'125 mm', indent:1, gchild:'adapter', nomore:true},
+        {type:'divider'},
+        {type:'refhead', text:'Used in operations'},
+        {type:'opitem', val:'Operation 1'},
+        {type:'opitem', val:'Operation 2'},
+        {type:'opitem', val:'Operation 4'}
+      ],
+      /* edit-tool content: setup/station params + tool filters (params), then divider, then results list */
+      tool:[
+        {label:'Station', ctl:'duo', val:'Turret', val2:'8', nomore:true, opts:STATION_OPTS, opts2:POSITION_OPTS},
+        {label:'Orientation', ctl:'dropdown', val:'Axial', shev:'open', ghead:'orient', nomore:true, opts:ORIENT_OPTS},
+        {label:'Opposite spindle', ctl:'toggle', on:false, indent:1, gchild:'orient', nomore:true},
+        {type:'divider'},
+        {label:'Tool Type', ctl:'dropdown', val:'External turning', opts:TOOLTYPE_OPTS, nomore:true},
+        {label:'Holder Type', ctl:'dropdown', val:'Any', opts:HOLDERTYPE_OPTS, nomore:true},
+        {label:'Insert Type', ctl:'dropdown', val:'Any', opts:INSERTTYPE_OPTS, nomore:true},
+        {label:'Hand Type', ctl:'dropdown', val:'Right (R)', opts:HANDTYPE_OPTS, nomore:true},
+        {type:'divider'},
+        {type:'search', placeholder:'Search'},
+        {type:'divider'},
+        {label:'Library tools', shev:'open', ghead:'lib', headonly:true},
+        {type:'listitem', val:'C2R-BR25-LH25DF1_270712203', gchild:'lib'},
+        {type:'listitem', val:'C6-DCLNR-45065-16B1_99964142', gchild:'lib'},
+        {type:'listitem', val:'C6-DSSNL-45054-15B1_99964972', gchild:'lib'},
+        {type:'listitem', val:'C6-DSSNR-45054-15B1_99964421', gchild:'lib'},
+        {type:'listitem', val:'C6-DVJNL-45065-16C1_227276620', gchild:'lib'},
+        {type:'listitem', val:'C6-DVJNR-45065-16C1_99965688', gchild:'lib'},
+        {type:'listitem', val:'CNMG-12 04 08-WF/DCLNR-2020K-12', gchild:'lib', sel:true},
+        {type:'listitem', val:'External Turn 20x20', gchild:'lib'},
+        {type:'listitem', val:'External Turn 25x25', gchild:'lib'},
+        {type:'listitem', val:'IC16 Re0.2 R OD cutting tool', gchild:'lib'}
+      ]
+    },
+    Speeds: [
+      {label:'Spindle speed', ctl:'input', val:'012000'},
+      {label:'Feed rate', ctl:'input', val:'001.200', indent:1},
+      {label:'Plunge rate', ctl:'input', val:'000.300', indent:1},
+      {label:'Units', ctl:'dropdown', val:'mm/min'},
+      {label:'Adaptive feed', ctl:'toggle', on:false}
+    ],
+    Strategy: [
+      {label:'Pattern', ctl:'dropdown', val:'Parallel'},
+      {label:'Stepover', ctl:'input', val:'002.000', indent:1},
+      {label:'Stock to leave', ctl:'input', val:'000.200', indent:1},
+      {label:'Direction', ctl:'pair', shev:'right'},
+      {label:'Climb milling', ctl:'toggle', on:true}
+    ],
+    Fixture: [
+      {label:'Type', ctl:'dropdown', val:'Vise'},
+      {label:'Offset', ctl:'input', val:'000.000', indent:1},
+      {label:'Clamp', ctl:'toggle', on:false}
+    ],
+    Links: [
+      {label:'Lead-in', ctl:'dropdown', val:'Arc'},
+      {label:'Lead-out', ctl:'dropdown', val:'Arc'},
+      {label:'Ramp', ctl:'toggle', on:true},
+      {label:'Distance', ctl:'input', val:'005.000', indent:1}
+    ],
+    More: [
+      {label:'Notes', ctl:'dropdown', val:'Text for example'},
+      {label:'Visible', ctl:'toggle', on:true}
+    ]
+  };
+  var DD_OPTS = ['Text for example','Linear','Radial','Spiral','None'];
+  var irows = document.getElementById('irows');
+  var inspTitle = document.getElementById('inspTitle');
+
+  function shevSrc(kind){ return kind==='leaf' ? A['shev-leaf'] : kind==='right' ? A['shev-right'] : A['shev-open']; }
+
+  function buildRow(p){
+    /* --- non-parameter rows --- */
+    if(p.type==='divider'){
+      var d = document.createElement('div'); d.className = 'line' + (p.strong ? ' strong' : ''); return d;
+    }
+    if(p.type==='caption'){
+      var c = document.createElement('div'); c.className = 'icap'; c.textContent = p.text; return c;
+    }
+    if(p.type==='refhead'){ /* reference section label — deliberately NOT a parameter row */
+      var rh = document.createElement('div'); rh.className = 'ref-head'; rh.textContent = p.text; return rh;
+    }
+    if(p.type==='search'){
+      var s = document.createElement('div'); s.className = 'search-row';
+      s.innerHTML = '<span class="input search-box"><input type="text" placeholder="'+(p.placeholder||'')+'"></span>';
+      return s;
+    }
+    if(p.type==='listitem'){
+      var li = document.createElement('div');
+      var cur = (p.val === PARAMS.Tool.head);
+      li.className = 'ilist-item asm-item' + (cur ? ' sel cur' : '') + (p._libActive ? ' active' : '');
+      if(p.gchild) li.dataset.group = p.gchild;
+      if(typeof p._libIdx === 'number') li.dataset.idx = p._libIdx;
+      li.innerHTML = '<span class="asm-name">'+p.val+'</span><span class="asm-cur">'+(cur?SVG_CHECK:'')+'</span>';
+      return li;
+    }
+    if(p.type==='opitem'){ /* read-only reference: an operation this assembly is used in */
+      var oi = document.createElement('div');
+      oi.className = 'opitem';
+      if(p.gchild){ oi.dataset.group = p.gchild; if(toolCollapsed[p.gchild]) oi.style.display = 'none'; }
+      oi.innerHTML = '<span class="op-dot"></span><span class="op-name">'+p.val+'</span>';
+      return oi;
+    }
+    /* --- parameter rows --- */
+    var row = document.createElement('div');
+    row.className = 'irow' + (p.sel ? ' sel' : '') + (p.ghead && toolCollapsed[p.ghead] ? ' collapsed' : '') + (p.ctl==='readonly' ? ' roparam' : '') + (p.lock ? ' lockable' : '');
+    if(p.ghead) row.dataset.ghead = p.ghead;
+    if(p.gchild){ row.dataset.group = p.gchild; if(toolCollapsed[p.gchild]) row.style.display = 'none'; }
+    var itlClass = 'itl' + (p.indent===1?' i1':p.indent===2?' i2':'');
+    var shevHtml = p.shev
+      ? '<img class="shev'+(p.ghead?' exp':'')+'" src="'+shevSrc(p.shev)+'">'
+      : '<i class="shev"></i>';
+    var lblCls = p.bold ? ' class="b"' : '';
+    var optsA  = p.opts  ? ' data-opts="'+p.opts.join('|')+'"'  : '';
+    var optsB  = p.opts2 ? ' data-opts="'+p.opts2.join('|')+'"' : '';
+    var ctlHtml = '', between = (p.ctl==='toggle' || p.ctl==='pair') && !p.tight;
+    if(p.ctl==='dropdown'){
+      ctlHtml = '<span class="dropdown"'+optsA+'><span class="v">'+p.val+'</span><img class="i16" src="'+A.ddchev+'"></span>';
+    } else if(p.ctl==='input'){
+      ctlHtml = '<span class="input"><span class="v">'+p.val+'</span></span>';
+    } else if(p.ctl==='readonly'){
+      ctlHtml = '<span class="roval">'+p.val+'</span>';
+    } else if(p.ctl==='toggle'){
+      ctlHtml = '<img class="tgl'+(p.on?' on':'')+'" src="'+(p.on?A['tgl-on']:A['tgl-off'])+'">';
+    } else if(p.ctl==='toggleInput'){
+      ctlHtml = '<img class="tgl'+(p.on?' on':'')+'" src="'+(p.on?A['tgl-on']:A['tgl-off'])+'"><span class="input"><span class="v">'+p.val+'</span></span>';
+    } else if(p.ctl==='pair'){
+      ctlHtml = '<span class="ipair"><span class="bicn"><img class="i16" src="'+A['row-a']+'"></span><span class="bicn"><img class="i16" src="'+A['row-b']+'"></span></span>';
+    } else if(p.ctl==='duo'){
+      ctlHtml = '<span class="dropdown duo-a"'+optsA+'><span class="v">'+p.val+'</span><img class="i16" src="'+A.ddchev+'"></span>'+
+                '<span class="dropdown duo-b"'+optsB+'><span class="v">'+p.val2+'</span><img class="i16" src="'+A.ddchev+'"></span>';
+    }
+    var trail;
+    if(p.editBtn)      trail = '<button class="rowbtn'+(editComp && editComp===p.ghead ? ' on' : '')+'" data-act="'+p.editBtn+'" title="Редактировать">'+SVG_EDIT+'</button>';
+    else if(p.plus)    trail = '<button class="rowbtn" title="Добавить точку">'+SVG_PLUS+'</button>';
+    else if(p.minus)   trail = '<button class="rowbtn" title="Удалить">'+SVG_MINUS+'</button>';
+    else               trail = p.nomore ? '' : '<img class="icn11" src="'+A.icn11+'">';
+    row.innerHTML =
+      '<div class="ilbl"><img class="hint" src="'+A.hint+'">'+
+        '<div class="'+itlClass+'">'+shevHtml+
+          '<span class="rlabel"><span'+lblCls+'>'+p.label+'</span></span></div></div>'+
+      (p.headonly ? '' : '<div class="ictl'+(between?' between':'')+'">'+ctlHtml+trail+'</div>');
+    return row;
+  }
+  var titleCtl = document.getElementById('titleCtl');
+
+  /* ---------- Tool Assembly workflow (view → edit assembly → edit tool, in-place) ---------- */
+  var toolState = 'view', toolPrev = 'view'; // 'view' | 'editAssembly' | 'editTool'(=build/pick) | 'pickAssembly'
+  var toolPickIdx = 0; // keyboard-focused row index in the pickAssembly list (flat across groups)
+  var toolLibIdx  = 0; // keyboard-focused row index in the editTool library-tools list
+  var editComp = null; // null | 'tool' | 'adapter' — which component's params are being edited (within editAssembly)
+  var toolCollapsed = {tool:true, adapter:true}; // assembly groups collapsed by default
+  var TOOL_ASSEMBLIES = [
+    {group:'Turret', items:[
+      'CNMG-12 04 08-WF/DCLNR-2020K-12',
+      'C6-DVJNR-45065-16C1 Axial block',
+      'C6-DCLNR-45065-16B1 Turn block'
+    ]},
+    {group:'Spindle', items:[
+      'Drill D10 L72580127 Axial drill block',
+      'C2R-BR25-LH25DF1 Boring bar',
+      'External Turn 25x25'
+    ]}
+  ];
+  var SVG_EDIT = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M10.4 3.1l2.5 2.5M2.7 11.2l7.7-7.7 2.5 2.5-7.7 7.7-3 .5.5-3z"/></svg>';
+  var SVG_PLUS = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>';
+  var SVG_MINUS = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3.5 8h9"/></svg>';
+  var SVG_SLIDERS = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M5 3.5v2.4M5 9.6v3M11 3.5v5.9M11 12.6v0"/><circle cx="5" cy="7.7" r="1.5" fill="currentColor" stroke="none"/><circle cx="11" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>';
+  var SVG_CHECK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+  var SVG_BACK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L5 8l4.5 4.5"/></svg>';
+
+  function toolActions(){
+    if(toolState==='pickAssembly' || toolState==='editTool')
+      return '<button class="tact tback" data-act="backPick" title="Назад">'+SVG_BACK+'<span>Back</span></button>';
+    return toolState==='view'
+      ? '<button class="tact ticn" data-act="editToolMode" title="Редактировать сборку">'+SVG_EDIT+'</button>'+
+        '<button class="tact ticn" data-act="addAsm" title="Создать новую сборку">'+SVG_PLUS+'</button>'
+      : '<button class="tact cancel" data-act="cancel">Cancel</button><button class="tact apply" data-act="apply">Apply</button>';
+  }
+  function selectorRow(withEdit){
+    var r = document.createElement('div');
+    r.className = 'tool-sel';
+    r.innerHTML =
+      '<span class="dropdown selbox" data-act="pickAsm"><span class="v">'+PARAMS.Tool.head+'</span><img class="i16" src="'+A.ddchev+'"></span>'+
+      (withEdit ? '<button class="edittool" data-act="editAsm" title="Редактировать сборку">'+SVG_EDIT+'</button>' : '');
+    return r;
+  }
+  function pickItemsFlat(){ var a = []; TOOL_ASSEMBLIES.forEach(function(g){ g.items.forEach(function(o){ a.push(o); }); }); return a; }
+  function libItemsFlat(){ return PARAMS.Tool.tool.filter(function(p){ return p.type==='listitem'; }).map(function(p){ return p.val; }); }
+  function pickList(){
+    var wrap = document.createElement('div');
+    wrap.className = 'asm-list';
+    var html = '', fi = -1;
+    TOOL_ASSEMBLIES.forEach(function(g, gi){
+      if(gi>0) html += '<div class="line"></div>';
+      html += '<div class="dd-head">'+g.group+'</div>';
+      var tn = 0;
+      g.items.forEach(function(o){
+        tn++; fi++;
+        var on = (o===PARAMS.Tool.head);
+        var active = (fi===toolPickIdx);
+        html += '<div class="ilist-item asm-item'+(on?' cur':'')+(active?' active':'')+'" data-asm="'+o.replace(/"/g,'&quot;')+'" data-idx="'+fi+'">'+
+                  '<span class="dd-pre">T#'+tn+'</span>'+
+                  '<span class="asm-name">'+o+'</span>'+
+                  '<span class="asm-cur">'+(on?SVG_CHECK:'')+'</span></div>';
+      });
+    });
+    wrap.innerHTML = html;
+    return wrap;
+  }
+  function focusPickRow(){ var a = irows.querySelector('.ilist-item.active, .asm-item.active'); if(a) a.scrollIntoView({block:'nearest'}); }
+  function renderToolTab(){
+    titleCtl.innerHTML = toolActions();
+    irows.innerHTML = '';
+    irows.classList.toggle('ro', toolState==='view');
+    if(toolState==='pickAssembly'){ irows.appendChild(pickList()); return; }
+    if(toolState==='editTool'){
+      var li = 0;
+      PARAMS.Tool.tool.forEach(function(p){
+        var pp = p;
+        if(p.type==='listitem'){
+          pp = Object.assign({}, p, {_libIdx: li, _libActive: li===toolLibIdx});
+          li++;
+        }
+        irows.appendChild(buildRow(pp));
+      });
+      return;
+    }
+    irows.appendChild(selectorRow(false)); /* edit pencil hidden for now (editAssembly still reachable in code) */
+    var d = document.createElement('div'); d.className = 'line'; irows.appendChild(d);
+    PARAMS.Tool.assembly.forEach(function(p){
+      // a component's read-only sub-params become editable inputs while that component is being edited
+      var pp = (p.ctl==='readonly' && editComp && p.gchild===editComp) ? Object.assign({}, p, {ctl:'input'}) : p;
+      irows.appendChild(buildRow(pp));
+    });
+  }
+  function gotoTool(s){ if(s==='editTool' || s==='pickAssembly') toolPrev = toolState; editComp = null; toolState = s; renderToolTab(); }
+  function toolRow(arr, label){ for(var i=0;i<arr.length;i++){ if(arr[i].label===label) return arr[i]; } return null; }
+  /* enter build/pick mode: '+' bumps the Station position to the next one, 'edit' keeps the current one */
+  function enterBuild(increment){
+    var aSt = toolRow(PARAMS.Tool.assembly, 'Station');
+    var tSt = toolRow(PARAMS.Tool.tool, 'Station');
+    if(aSt && tSt){
+      var n = parseInt(aSt.val2, 10); if(isNaN(n)) n = 0;
+      tSt.val = aSt.val;                       // same magazine (Turret/Spindle)
+      tSt.val2 = String(increment ? n + 1 : n); // '+' → next position; 'edit' → keep current
+    }
+    toolLibIdx = Math.max(0, libItemsFlat().indexOf(PARAMS.Tool.head)); // keyboard focus = current head
+    gotoTool('editTool');
+    focusPickRow();
+  }
+
+  function renderInspector(tab){
+    if(tab==='Tool'){ renderToolTab(); return; }
+    titleCtl.innerHTML = '';
+    irows.classList.remove('ro');
+    var cfg = PARAMS[tab] || [];
+    var list = Array.isArray(cfg) ? cfg : (cfg.rows || []);
+    irows.innerHTML = '';
+    list.forEach(function(p){ irows.appendChild(buildRow(p)); });
+  }
+  document.querySelectorAll('.rbtn[data-tab]').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('.rbtn[data-tab]').forEach(function(x){x.classList.remove('active');});
+      b.classList.add('active');
+      var tab = b.dataset.tab;
+      if(tab){ toolState = 'view'; inspTitle.textContent = tab; renderInspector(tab); }
+    });
+  });
+  /* Tool workflow actions: Edit / Cancel / Apply / edit-tool */
+  document.addEventListener('click', function(e){
+    var act = e.target.closest('[data-act]');
+    if(!act) return;
+    e.stopPropagation();
+    var a = act.dataset.act;
+    if(a==='editAsm') gotoTool('editAssembly');            /* edit assembly: pick tool/adapter */
+    else if(a==='pickAsm'){ toolPickIdx = Math.max(0, pickItemsFlat().indexOf(PARAMS.Tool.head)); gotoTool('pickAssembly'); focusPickRow(); } /* full-panel picker, focus current */
+    else if(a==='backPick') gotoTool(toolPrev||'view');    /* back from picker without changing selection */
+    else if(a==='addAsm') enterBuild(true);                /* create new assembly → next Station position */
+    else if(a==='editToolMode') enterBuild(false);         /* edit current assembly → keep Station position */
+    else if(a==='compTool'){ editComp='tool'; toolCollapsed.tool=false; renderToolTab(); }       /* edit tool params */
+    else if(a==='compAdapter'){ editComp='adapter'; toolCollapsed.adapter=false; renderToolTab(); } /* edit adapter params */
+    else if(a==='cancel' || a==='apply'){
+      if(toolState==='editTool') gotoTool(toolPrev||'view');
+      else if(editComp){ editComp=null; renderToolTab(); }  /* component edit → back to assembly edit */
+      else gotoTool('view');                                /* assembly edit → view */
+    }
+  });
+  /* keyboard navigation for any list mode: ↑/↓ moves focus AND applies immediately (check moves with focus); Enter/Esc closes */
+  document.addEventListener('keydown', function(e){
+    var picker = toolState==='pickAssembly', builder = toolState==='editTool';
+    if(!picker && !builder) return;
+    var flat = picker ? pickItemsFlat() : libItemsFlat();
+    if(!flat.length) return;
+    var idxVar = function(v){ if(picker) toolPickIdx = v; else toolLibIdx = v; };
+    var idxCur = picker ? toolPickIdx : toolLibIdx;
+    var apply = function(){ PARAMS.Tool.head = flat[picker?toolPickIdx:toolLibIdx]; renderToolTab(); focusPickRow(); };
+    if(e.key==='ArrowDown'){ e.preventDefault(); idxVar(Math.min(idxCur+1, flat.length-1)); apply(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); idxVar(Math.max(idxCur-1, 0)); apply(); }
+    else if(e.key==='Home'){ e.preventDefault(); idxVar(0); apply(); }
+    else if(e.key==='End'){ e.preventDefault(); idxVar(flat.length-1); apply(); }
+    else if(e.key==='Enter' || e.key==='Escape'){ e.preventDefault(); gotoTool(toolPrev||'view'); }
+  });
+
+  /* ---------- Theme toggle (light/dark) ---------- */
+  var themeBtn = document.getElementById('themeBtn');
+  if(themeBtn){
+    themeBtn.addEventListener('click', function(){
+      var root = document.documentElement;
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+    });
+  }
+
+  /* ---------- Inspector interactions (event delegation) ---------- */
+  irows.addEventListener('click', function(e){
+    var tgl = e.target.closest('.tgl');
+    if(tgl){ e.stopPropagation(); var on = tgl.classList.toggle('on'); tgl.src = on ? A['tgl-on'] : A['tgl-off']; return; }
+    /* .selbox is not a menu anymore — it navigates to the full-panel picker (data-act=pickAsm), so let it bubble */
+    var dd = e.target.closest('.dropdown:not(.selbox)');
+    if(dd){
+      e.stopPropagation();
+      if(openMenu && openMenu._owner === dd){ closeMenu(); return; }
+      var v = dd.querySelector('.v');
+      var opts = dd.dataset.opts ? dd.dataset.opts.split('|') : DD_OPTS.slice();
+      if(opts.indexOf(v.textContent) < 0) opts = [v.textContent].concat(opts);
+      var items = opts.map(function(o){ return {label:o, cur:o===v.textContent, onPick:function(){ v.textContent=o; }}; });
+      showMenu(dd.getBoundingClientRect(), items, dd, dd.getBoundingClientRect().width);
+      return;
+    }
+    var gshev = e.target.closest('.shev.exp');
+    if(gshev){
+      var ghrow = gshev.closest('.irow[data-ghead]');
+      if(ghrow){
+        e.stopPropagation();
+        var gid = ghrow.dataset.ghead;
+        var hide = !ghrow.classList.contains('collapsed');
+        ghrow.classList.toggle('collapsed', hide);
+        if(gid in toolCollapsed) toolCollapsed[gid] = hide;
+        irows.querySelectorAll('[data-group="'+gid+'"]').forEach(function(x){ x.style.display = hide ? 'none' : ''; });
+        return;
+      }
+    }
+    var litem = e.target.closest('.ilist-item');
+    if(litem){
+      /* click on a list row only MOVES the selection (same as arrow keys); Back/Esc/Enter closes */
+      if(litem.dataset.asm){
+        PARAMS.Tool.head = litem.dataset.asm;
+        toolPickIdx = parseInt(litem.dataset.idx, 10) || 0;
+        renderToolTab(); focusPickRow();
+      } else {
+        var name = litem.querySelector('.asm-name');
+        if(name){
+          PARAMS.Tool.head = name.textContent;
+          toolLibIdx = libItemsFlat().indexOf(name.textContent);
+          renderToolTab(); focusPickRow();
+        }
+      }
+      return;
+    }
+    var more = e.target.closest('.icn11');
+    if(more){
+      e.stopPropagation();
+      showMenu(more.getBoundingClientRect(), [
+        {label:'Reset value'}, {label:'Copy'}, {label:'Paste'}, {sep:true}, {label:'Reset to default'}
+      ], null, 140);
+      return;
+    }
+    var row = e.target.closest('.irow');
+    if(row){ irows.querySelectorAll('.irow').forEach(function(x){x.classList.remove('sel');}); row.classList.add('sel'); }
+  });
+
+  renderInspector('Tool'); // initial
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ency-inspector",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["dev-server.js"],
+      "cwd": "C:/Users/ruslanm/ENCY Inspector",
+      "port": 5579
+    }
+  ]
+}
