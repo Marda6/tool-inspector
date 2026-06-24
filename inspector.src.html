@@ -100,7 +100,13 @@
   .comp.chain::before,.comp.chain-thru::before{content:'';position:absolute;left:8px;top:0;bottom:-2px;width:1px;background:var(--ec-fg-24);pointer-events:none;}
   .comp.chain.chain-top::before{top:50%;}
   .comp.chain.chain-bottom::before{bottom:50%;}
-  .gnode{position:absolute;left:5.5px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--ec-fg-56);pointer-events:none;}
+  /* node doubles as a per-component lock control: dot by default, lock glyph when fixed */
+  .gnode{position:absolute;left:5.5px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--ec-fg-56);cursor:pointer;}
+  .gnode::after{content:'';position:absolute;left:-7px;top:-8px;width:20px;height:22px;}/* larger click target */
+  .irow:hover .gnode{background:var(--ec-fg-100);}
+  .gnode.locked,.irow:hover .gnode.locked{width:12px;height:12px;margin-top:-6px;left:2px;border-radius:0;
+    background:transparent;color:var(--ec-yellow);display:flex;align-items:center;justify-content:center;}
+  .gnode.locked svg{display:block;}
   .icap{padding:2px 4px 2px 28px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
   .sel-hint{padding:2px 8px 4px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
   .search-row{display:flex;padding:2px;}
@@ -504,7 +510,7 @@
       ctlHtml = '<span class="dropdown duo-a"'+optsA+'><span class="v">'+p.val+'</span><img class="i16" src="'+A.ddchev+'"></span>'+duoB;
     }
     var trail;
-    if(p.pinnable)     trail = '<button class="rowbtn pinbtn'+(p.pinned?' on':'')+'" title="'+(p.pinned?'Открепить компонент':'Зафиксировать компонент')+'">'+(p.pinned?SVG_LOCK:SVG_LOCK_OPEN)+'</button>';
+    if(p.pinnable)     trail = ''; /* lock moved onto the chain node; no right-side button */
     else if(p.flipBtn) trail = '<button class="rowbtn flipbtn" title="Opposite spindle">'+flipSvg(!!p.flip)+'</button>';
     else if(p.editBtn) trail = '<button class="rowbtn'+(editComp && editComp===p.ghead ? ' on' : '')+'" data-act="'+p.editBtn+'" title="Редактировать">'+SVG_EDIT+'</button>';
     else if(p.plus)    trail = '<button class="rowbtn" title="Добавить точку">'+SVG_PLUS+'</button>';
@@ -515,7 +521,13 @@
         '<div class="'+itlClass+'">'+shevHtml+
           '<span class="rlabel"><span'+lblCls+'>'+p.label+'</span></span></div></div>'+
       (p.headonly ? '' : '<div class="ictl'+(between?' between':'')+'">'+ctlHtml+trail+'</div>');
-    if(p.chain){ var gn = document.createElement('i'); gn.className = 'gnode'; row.insertBefore(gn, row.firstChild); }
+    if(p.chain){
+      var gn = document.createElement('i');
+      gn.className = 'gnode' + (p.pinned ? ' locked' : '');
+      gn.title = p.pinned ? 'Зафиксировано — нажмите, чтобы открепить' : 'Зафиксировать компонент';
+      if(p.pinned) gn.innerHTML = SVG_GNODE_LOCK;
+      row.insertBefore(gn, row.firstChild);
+    }
     return row;
   }
   var titleCtl = document.getElementById('titleCtl');
@@ -564,6 +576,8 @@
   var SVG_BACK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L5 8l4.5 4.5"/></svg>';
   var SVG_LOCK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><rect x="3.5" y="7" width="9" height="6" rx="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></svg>';
   var SVG_LOCK_OPEN = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><rect x="3.5" y="7" width="9" height="6" rx="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 4.9-.55"/></svg>';
+  /* compact lock drawn at the chain node when a component is fixed */
+  var SVG_GNODE_LOCK = '<svg viewBox="0 0 12 12" width="12" height="12"><rect x="2.3" y="5.4" width="7.4" height="5" rx="1.1" fill="currentColor"/><path d="M3.8 5.4V4.1a2.2 2.2 0 0 1 4.4 0V5.4" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round"/></svg>';
   var SVG_FILTER = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4H13.5L9 9V12.5L7 13.5V9L2.5 4Z"/></svg>';
   function flipSvg(on){ /* icn_flip 1/2 from Figma Core: active arrow full, the other dimmed (0.48) */
     var botLeft = on ? '0.48' : '1';   // bottom-left arrow
@@ -673,6 +687,13 @@
   function stationKind(v){ return (v==='Spindle' || v==='Sub-spindle') ? 'spindle' : 'turret'; }
   function asmRow(label){ return toolRow(PARAMS.Tool.assembly, label); }
   function setRowVal(label, val){ var r=asmRow(label); if(r) r.val = val; }
+  /* lock on the chain node: each component is fixed independently, by hand */
+  function toggleLock(label){
+    var me = asmRow(label);
+    if(!me) return;
+    me.pinned = !me.pinned;
+    renderToolTab();
+  }
   function refreshChildren(){ /* pull read-only child dims from the selected component's metadata */
     var t = META[asmRow('Tool').val]||{};
     setRowVal('Diameter', t.d||'—'); setRowVal('Length (L)', t.l||'—'); setRowVal('Working length (WL)', t.wl||'—');
@@ -781,12 +802,11 @@
   irows.addEventListener('click', function(e){
     var tgl = e.target.closest('.tgl');
     if(tgl){ e.stopPropagation(); var on = tgl.classList.toggle('on'); tgl.src = on ? A['tgl-on'] : A['tgl-off']; return; }
-    var pin = e.target.closest('.pinbtn');
-    if(pin){
+    var node = e.target.closest('.gnode');
+    if(node){
       e.stopPropagation();
-      var prow = pin.closest('.irow'), plbl = prow && prow.querySelector('.rlabel span').textContent;
-      var pe = plbl && toolRow(PARAMS.Tool.assembly, plbl);
-      if(pe){ pe.pinned = !pe.pinned; renderToolTab(); }
+      var nrow = node.closest('.irow'), nlbl = nrow && nrow.querySelector('.rlabel span').textContent;
+      toggleLock(nlbl);
       return;
     }
     var flip = e.target.closest('.flipbtn');
