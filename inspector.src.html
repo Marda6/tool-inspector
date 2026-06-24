@@ -57,8 +57,11 @@
   .rbtn:hover{background:var(--ec-fg-4);}
   .rbtn.active{background:var(--ec-bg-96);}
   .ricn{width:20px;height:20px}
-  .title-row{display:flex;align-items:center;gap:4px;padding:2px 2px 2px 8px;border-radius:6px;}
+  .title-row{display:flex;align-items:center;gap:4px;min-height:28px;padding:2px 2px 2px 8px;border-radius:6px;}
   .title-row .t{color:var(--ec-fg-96);font:600 14px/20px var(--ec-font);padding-right:8px;}
+  .title-row .crumb-mut{color:var(--ec-fg-56);font-weight:400;}  /* breadcrumb root: dimmed + regular weight */
+  .title-row .crumb-sep{color:var(--ec-fg-24);margin:0 6px;font-weight:400;}
+  .title-row .crumb-cur{color:var(--ec-fg-96);}                  /* breadcrumb current: bright + bold */
   .title-ctl{flex:1 1 0;display:flex;justify-content:flex-end;min-width:0;gap:4px;}
   .title-ctl .dropdown{flex:0 1 auto;max-width:300px;}
   .irows{display:flex;flex-direction:column;gap:2px;overflow:auto;flex:1 1 0;min-height:0;}
@@ -247,7 +250,7 @@
       </div>
 
       <div class="inner">
-        <div class="title-row"><span class="t" id="inspTitle">Tool</span><span class="title-ctl" id="titleCtl"></span></div>
+        <div class="title-row"><span class="t" id="inspTitle">Tool assembly</span><span class="title-ctl" id="titleCtl"></span></div>
         <div class="line"></div>
         <div class="irows" id="irows"></div>
         <div class="inspfoot" id="inspFoot"></div>
@@ -448,6 +451,7 @@
   var irows = document.getElementById('irows');
   var inspFoot = document.getElementById('inspFoot');
   var inspTitle = document.getElementById('inspTitle');
+  var currentTab = 'Tool';
 
   function shevSrc(kind){ return kind==='leaf' ? A['shev-leaf'] : kind==='right' ? A['shev-right'] : A['shev-open']; }
 
@@ -622,7 +626,7 @@
   function selHint(){ /* footer: live total overhang first; reuse note only when the assembly is shared by other operations */
     var p = findPreset(PARAMS.Tool.head), n = (p && p.ops) || 0;
     var el = document.createElement('div'); el.className = 'sel-foot';
-    var html = '<span class="sb-item">Overhang '+totalOverhang()+' mm</span>';
+    var html = '<span class="sb-item">Total overhang '+totalOverhang()+' mm</span>';
     if(n) html += '<i class="sb-sep"></i><span class="sb-item">Used in '+n+' operation'+(n===1?'':'s')+'</span>';
     el.innerHTML = html;
     return el;
@@ -672,6 +676,9 @@
   function focusPickRow(){ var a = irows.querySelector('.ilist-item.active, .asm-item.active'); if(a) a.scrollIntoView({block:'nearest'}); }
   function renderToolTab(){
     titleCtl.innerHTML = toolActions();
+    inspTitle.innerHTML = (toolState==='editTool') /* build mode → breadcrumb: muted root / bright current */
+      ? '<span class="crumb-mut">Tool assembly</span><span class="crumb-sep">/</span><span class="crumb-cur">Add new</span>'
+      : 'Tool assembly';
     irows.innerHTML = '';
     inspFoot.innerHTML = ''; // footer only shows for the assembly view
     irows.classList.remove('ro'); // assembly composition is always editable
@@ -771,7 +778,7 @@
       document.querySelectorAll('.rbtn[data-tab]').forEach(function(x){x.classList.remove('active');});
       b.classList.add('active');
       var tab = b.dataset.tab;
-      if(tab){ toolState = 'view'; inspTitle.textContent = tab; renderInspector(tab); }
+      if(tab){ toolState = 'view'; currentTab = tab; inspTitle.textContent = tab; renderInspector(tab); }
     });
   });
   /* Tool workflow actions: Edit / Cancel / Apply / edit-tool */
@@ -869,7 +876,7 @@
           v.textContent = o;
           if(libAd){ var L = LIBRARY[+libAd.dataset.lib]; if(L && L.adapters[+libAd.dataset.adi]) L.adapters[+libAd.dataset.adi].val = o; return; }
           /* Tool tab edits apply live (no Apply): persist back to the data model */
-          if(inspTitle.textContent!=='Tool' || !pLabel) return;
+          if(currentTab!=='Tool' || !pLabel) return;
           var entry = toolRow(PARAMS.Tool.assembly, pLabel);
           if(entry){
             if(isDuoB) entry.val2 = o; else entry.val = o;
