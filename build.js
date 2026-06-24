@@ -14,4 +14,5 @@ html = html.replace(/src="assets\/([^"]+\.svg)"/g, (m, name) => {
   return 'src="' + cache[name] + '"';
 });
 fs.writeFileSync(OUT, html);
-console.log('built ' + OUT + ' — inlined ' + Object.keys(cache).length + ' svgs, ' + html.length + ' bytes');
+fs.writeFileSync('index.html', html); // GitHub Pages entry point (served at the site root)
+console.log('built ' + OUT + ' + index.html — inlined ' + Object.keys(cache).length + ' svgs, ' + html.length + ' bytes');
