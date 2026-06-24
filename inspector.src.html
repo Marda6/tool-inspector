@@ -115,7 +115,6 @@
     border-top:1px solid var(--ec-fg-8);
     color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
   .sel-foot .sb-sep{flex:0 0 1px;width:1px;height:11px;background:var(--ec-fg-16);}
-  .sel-foot b{font-weight:600;color:var(--ec-fg-100);}
   .search-row{display:flex;padding:2px;}
   .search-box{flex:1 1 0;padding:0;}
   .search-row .filterbtn{flex:0 0 24px;width:24px;height:24px;margin-left:4px;}
@@ -620,14 +619,12 @@
     var a3 = META[asmRow('Adapter 3').val] || {};
     return Math.round(mmVal(t.l) + mmVal(a1.holder) + mmVal(a2.coupling) + mmVal(a3.ext));
   }
-  function selHint(){ /* chip under the selector: operations reusing this assembly + live total overhang, one line via a divider */
+  function selHint(){ /* footer: live total overhang first; reuse note only when the assembly is shared by other operations */
     var p = findPreset(PARAMS.Tool.head), n = (p && p.ops) || 0;
     var el = document.createElement('div'); el.className = 'sel-foot';
-    var ops = n ? ('Used in '+n+' operation'+(n===1?'':'s')) : 'Not used in operations';
-    el.innerHTML =
-      '<span class="sb-item">'+ops+'</span>'+
-      '<i class="sb-sep"></i>'+
-      '<span class="sb-item">Overhang <b>'+totalOverhang()+' mm</b></span>';
+    var html = '<span class="sb-item">Overhang '+totalOverhang()+' mm</span>';
+    if(n) html += '<i class="sb-sep"></i><span class="sb-item">Used in '+n+' operation'+(n===1?'':'s')+'</span>';
+    el.innerHTML = html;
     return el;
   }
   function libItemsFlat(){ return LIBRARY.map(function(it){ return it.name; }); }
