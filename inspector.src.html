@@ -146,10 +146,9 @@
   .rowbtn:hover{background:var(--ec-fg-8);color:var(--ec-fg-96);}
   .rowbtn.on{background:var(--ec-fg-12);color:var(--ec-fg-96);}
   /* pin/lock: fix a component so the auto-pick keeps it; open lock shows on hover, closed lock is a persistent indicator */
-  .pinbtn{visibility:hidden;color:var(--ec-fg-56);}
-  .irow:hover .pinbtn,.irow.sel .pinbtn{visibility:visible;}
-  .pinbtn.on{visibility:visible;background:var(--ec-fg-12);color:var(--ec-yellow);}
-  .irows.ro .lockable .pinbtn{display:flex;} /* lock stays available even on read-only (locked) component rows */
+  .pinbtn{opacity:.3;color:var(--ec-fg-56);}            /* barely-there hint by default */
+  .irow:hover .pinbtn,.irow.sel .pinbtn{opacity:1;}     /* full button on row hover */
+  .pinbtn.on{opacity:1;background:var(--ec-fg-12);color:var(--ec-yellow);}
 
   .dd-menu{position:fixed;z-index:1000;background:var(--ec-bg-96);
     -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
@@ -490,7 +489,7 @@
                 '<span class="dropdown duo-b"'+optsB+'><span class="v">'+p.val2+'</span><img class="i16" src="'+A.ddchev+'"></span>';
     }
     var trail;
-    if(p.pinnable)     trail = '<button class="rowbtn pinbtn'+(p.pinned?' on':'')+'" title="'+(p.pinned?'Открепить компонент':'Зафиксировать компонент')+'">'+(p.pinned?SVG_LOCK:SVG_LOCK_OPEN)+'</button>';
+    if(p.pinnable && toolState==='editAssembly') trail = '<button class="rowbtn pinbtn'+(p.pinned?' on':'')+'" title="'+(p.pinned?'Открепить компонент':'Зафиксировать компонент')+'">'+(p.pinned?SVG_LOCK:SVG_LOCK_OPEN)+'</button>';
     else if(p.editBtn) trail = '<button class="rowbtn'+(editComp && editComp===p.ghead ? ' on' : '')+'" data-act="'+p.editBtn+'" title="Редактировать">'+SVG_EDIT+'</button>';
     else if(p.plus)    trail = '<button class="rowbtn" title="Добавить точку">'+SVG_PLUS+'</button>';
     else if(p.minus)   trail = '<button class="rowbtn" title="Удалить">'+SVG_MINUS+'</button>';
