@@ -12,6 +12,7 @@
     --ec-fg-24:rgba(245,245,245,.24); --ec-fg-16:rgba(245,245,245,.16); --ec-fg-12:rgba(245,245,245,.12); --ec-fg-8:rgba(245,245,245,.08);
     --ec-fg-4:rgba(245,245,245,.04);
     --ec-green:#00a36d;
+    --ec-yellow:#ffc400;
     --ec-font:'Inter','Inter var',system-ui,-apple-system,'Segoe UI',sans-serif;
   }
   *{box-sizing:border-box}
@@ -21,8 +22,8 @@
   img{display:block}
 
   /* ===== Host: center the standalone inspector panel ===== */
-  .app{position:fixed;inset:0;display:flex;align-items:stretch;justify-content:center;padding:16px;}
-  .insp-host{width:341px;display:flex;flex-direction:column;min-height:0;}
+  .app{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;}
+  .insp-host{width:341px;height:500px;display:flex;flex-direction:column;min-height:0;}
 
   .panel16{background:var(--ec-fg-16);border-radius:10px;padding:2px;display:flex;min-height:0;}
   .panel-insp{flex:1 1 auto;gap:2px;}
@@ -108,6 +109,7 @@
   .tact.apply{background:var(--ec-fg-16);color:var(--ec-fg-96);}
   .tact.apply:hover{background:var(--ec-fg-24);}
   .tact.ticn{padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:var(--ec-fg-72);}
+  .tact.ticn.on{background:var(--ec-fg-12);color:var(--ec-fg-96);}
   .tact.tback{display:inline-flex;align-items:center;gap:3px;padding-left:4px;}
   .asm-list{display:flex;flex-direction:column;padding-top:2px;}
   .asm-list .ilist-item{padding-left:6px;} /* no hierarchy here: items align with the group heading */
@@ -143,14 +145,23 @@
     border:0;border-radius:4px;background:transparent;color:var(--ec-fg-56);cursor:pointer;padding:0;}
   .rowbtn:hover{background:var(--ec-fg-8);color:var(--ec-fg-96);}
   .rowbtn.on{background:var(--ec-fg-12);color:var(--ec-fg-96);}
+  /* pin/lock: fix a component so the auto-pick keeps it; open lock shows on hover, closed lock is a persistent indicator */
+  .pinbtn{visibility:hidden;color:var(--ec-fg-56);}
+  .irow:hover .pinbtn,.irow.sel .pinbtn{visibility:visible;}
+  .pinbtn.on{visibility:visible;background:var(--ec-fg-12);color:var(--ec-yellow);}
+  .irows.ro .lockable .pinbtn{display:flex;} /* lock stays available even on read-only (locked) component rows */
 
-  .dd-menu{position:fixed;z-index:1000;background:var(--ec-bg-96);border:1px solid var(--ec-fg-12);
+  .dd-menu{position:fixed;z-index:1000;background:var(--ec-bg-96);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    border:1px solid var(--ec-fg-24);
     border-radius:4px;padding:2px;display:flex;flex-direction:column;gap:1px;
-    box-shadow:0 6px 20px rgba(0,0,0,.5);}
+    box-shadow:0 8px 24px rgba(0,0,0,.6);}
   .dd-opt{padding:4px 6px;border-radius:3px;color:var(--ec-fg-72);font:400 12px/16px var(--ec-font);
-    cursor:pointer;white-space:nowrap;}
+    cursor:pointer;white-space:nowrap;display:flex;align-items:center;}
   .dd-opt:hover{background:var(--ec-fg-8);color:var(--ec-fg-96);}
   .dd-opt.cur{color:var(--ec-fg-100);}
+  .dd-check{margin-left:auto;padding-left:16px;color:var(--ec-green);display:inline-flex;align-items:center;}
+  .dd-opt.cur .dd-pre{color:var(--ec-green);}
   .dd-sep{height:1px;background:var(--ec-fg-12);margin:2px 0;}
   .dd-head{padding:5px 6px 2px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
   .dd-pre{display:inline-block;min-width:28px;margin-right:6px;color:var(--ec-fg-56);
@@ -254,8 +265,8 @@
       o.className = 'dd-opt' + (it.cur ? ' cur' : '');
       if(it.pre){ var pr = document.createElement('span'); pr.className = 'dd-pre'; pr.textContent = it.pre; o.appendChild(pr); }
       if(it.color){ var sw = document.createElement('span'); sw.className = 'dd-sw'; sw.style.background = it.color; o.appendChild(sw); }
-      if(it.pre || it.color){ o.appendChild(document.createTextNode(it.label)); }
-      else { o.textContent = it.label; }
+      o.appendChild(document.createTextNode(it.label));
+      if(it.check){ var ck = document.createElement('span'); ck.className = 'dd-check'; ck.innerHTML = SVG_CHECK; o.appendChild(ck); }
       o.addEventListener('click', function(ev){ ev.stopPropagation(); if(it.onPick) it.onPick(); closeMenu(); });
       menu.appendChild(o);
     });
@@ -276,8 +287,49 @@
   var POSITION_OPTS   = ['1','2','3','4','5','6','7','8','9','10','11','12'];
   var CORRECTOR_OPTS  = ['Auto','1','2','3','4','5','6','7','8','9','10','11','12'];
   var ORIENT_OPTS     = ['Axial', 'Radial', 'Angular', 'Back-turning'];
-  var INSERT_OPTS     = ['CNMG 12 04 08-WF', 'DNMG 15 06 08-PM', 'VNMG 16 04 08-MF', 'WNMG 08 04 08-PM', 'TNMG 16 04 08-PM', 'SNMG 12 04 08-PR'];
-  var HOLDER_OPTS     = ['DCLNR 2020K 12', 'PCLNR 2525M 12', 'MCLNR 2020K 12', 'SVJBR 2020K 16', 'DDJNR 2020K 15', 'A25T-DCLNR 12'];
+  /* Tooling catalog — option lists per station kind (turret vs spindle); each Station selection filters these. */
+  var CATALOG = {
+    turret: {
+      tool:    ['CNMG 12 04 08-PM','DNMG 15 06 08-PM','VNMG 16 04 08-MF','WNMG 08 04 08-PM','TNMG 16 04 08-PR','SNMG 12 04 08-PR'],
+      adapter: ['DCLNR 2020K 12','DDJNR 2020K 15','SVJBR 2020K 16','MWLNR 2020K 08','MTJNR 2020K 16','CSSNR 2525M 12'],
+      adapter2:['VDI 40 — DIN 69880','VDI 30 — DIN 69880','BMT65 turret block','BMT55 turret block','Square shank 20×20','Square shank 25×25'],
+      def:{tool:'CNMG 12 04 08-PM', adapter:'DCLNR 2020K 12', adapter2:'VDI 40 — DIN 69880'}
+    },
+    spindle: {
+      tool:    ['Drill Ø10 HSS-Co','Drill Ø12 carbide','End mill Ø10 4FL','End mill Ø16 3FL','Reamer Ø12 H7','Boring bar A20-SCLCR'],
+      adapter: ['ER32 collet chuck','ER40 collet chuck','Shrink fit Ø10','Shrink fit Ø16','Weldon Ø16','Boring head 20–40'],
+      adapter2:['Capto C6','Capto C8','HSK-A63','HSK-A100','BT40','BT50'],
+      def:{tool:'Drill Ø10 HSS-Co', adapter:'ER32 collet chuck', adapter2:'Capto C6'}
+    }
+  };
+  /* Per-component metadata: k = compatibility key (turret = ISO insert shape, spindle = mounting class);
+     d/l/wl/holder/coupling feed the read-only child rows. */
+  var META = {
+    'CNMG 12 04 08-PM':{k:'C', d:'12.7 mm', l:'12.9 mm', wl:'4.0 mm'},
+    'DNMG 15 06 08-PM':{k:'D', d:'12.7 mm', l:'15.5 mm', wl:'6.0 mm'},
+    'VNMG 16 04 08-MF':{k:'V', d:'9.525 mm',l:'16.6 mm', wl:'4.0 mm'},
+    'WNMG 08 04 08-PM':{k:'W', d:'12.7 mm', l:'8.7 mm',  wl:'4.0 mm'},
+    'TNMG 16 04 08-PR':{k:'T', d:'9.525 mm',l:'16.5 mm', wl:'4.0 mm'},
+    'SNMG 12 04 08-PR':{k:'S', d:'12.7 mm', l:'12.7 mm', wl:'4.0 mm'},
+    'DCLNR 2020K 12':{k:'C', holder:'125 mm'}, 'DDJNR 2020K 15':{k:'D', holder:'125 mm'},
+    'SVJBR 2020K 16':{k:'V', holder:'150 mm'}, 'MWLNR 2020K 08':{k:'W', holder:'125 mm'},
+    'MTJNR 2020K 16':{k:'T', holder:'125 mm'}, 'CSSNR 2525M 12':{k:'S', holder:'150 mm'},
+    'VDI 40 — DIN 69880':{coupling:'63 mm'}, 'VDI 30 — DIN 69880':{coupling:'48 mm'},
+    'BMT65 turret block':{coupling:'65 mm'}, 'BMT55 turret block':{coupling:'55 mm'},
+    'Square shank 20×20':{coupling:'20 mm'}, 'Square shank 25×25':{coupling:'25 mm'},
+    'Drill Ø10 HSS-Co':{k:'rot', d:'10.0 mm', l:'133 mm', wl:'87 mm'},
+    'Drill Ø12 carbide':{k:'rot', d:'12.0 mm', l:'151 mm', wl:'96 mm'},
+    'End mill Ø10 4FL':{k:'rot', d:'10.0 mm', l:'72 mm', wl:'22 mm'},
+    'End mill Ø16 3FL':{k:'rot', d:'16.0 mm', l:'92 mm', wl:'32 mm'},
+    'Reamer Ø12 H7':{k:'rot', d:'12.0 mm', l:'151 mm', wl:'26 mm'},
+    'Boring bar A20-SCLCR':{k:'bore', d:'20.0 mm', l:'180 mm', wl:'12 mm'},
+    'ER32 collet chuck':{k:'rot', holder:'100 mm'}, 'ER40 collet chuck':{k:'rot', holder:'100 mm'},
+    'Shrink fit Ø10':{k:'rot', holder:'90 mm'}, 'Shrink fit Ø16':{k:'rot', holder:'95 mm'},
+    'Weldon Ø16':{k:'rot', holder:'80 mm'}, 'Boring head 20–40':{k:'bore', holder:'110 mm'},
+    'Capto C6':{coupling:'72 mm'}, 'Capto C8':{coupling:'90 mm'},
+    'HSK-A63':{coupling:'50 mm'}, 'HSK-A100':{coupling:'80 mm'},
+    'BT40':{coupling:'65 mm'}, 'BT50':{coupling:'100 mm'}
+  };
   var TOOLTYPE_OPTS   = ['External turning', 'Internal turning', 'Face turning', 'Grooving', 'Threading', 'Parting / Cut-off'];
   var HOLDERTYPE_OPTS = ['Any', 'L — Left hand', 'R — Right hand', 'N — Neutral'];
   var INSERTTYPE_OPTS = ['Any', 'C — 80° rhombic', 'D — 55° rhombic', 'V — 35° rhombic', 'W — 80° trigon', 'T — 60° triangle', 'S — square'];
@@ -296,26 +348,23 @@
       {label:'Rapid Z', ctl:'input', val:'005.000', indent:2, shev:'leaf'}
     ],
     Tool: {
-      head:'CNMG-12 04 08-WF/DCLNR-2020K-12',
+      head:'CNMG / DCLNR — external roughing',
       /* read-only / edit-assembly content — assembly composition (concept) */
       assembly:[
-        {label:'Station', ctl:'duo', val:'Turret', val2:'8', nomore:true, opts:STATION_OPTS, opts2:POSITION_OPTS},
+        {label:'Station', ctl:'duo', val:'Turret', val2:'1', nomore:true, pinnable:true, opts:STATION_OPTS, opts2:POSITION_OPTS},
         {label:'Corrector', ctl:'dropdown', val:'Auto', nomore:true, opts:CORRECTOR_OPTS},
         {label:'Corrector 2', ctl:'dropdown', val:'Auto', nomore:true, opts:CORRECTOR_OPTS},
         {label:'Orientation', ctl:'dropdown', val:'Axial', shev:'open', ghead:'orient', nomore:true, opts:ORIENT_OPTS},
         {label:'Opposite spindle', ctl:'toggle', on:false, indent:1, gchild:'orient', nomore:true},
         {type:'divider'},
-        {label:'Tool', ctl:'dropdown', val:'CNMG 12 04 08-WF', shev:'open', ghead:'tool', editBtn:'compTool', lock:true, opts:INSERT_OPTS},
+        {label:'Tool', ctl:'dropdown', val:'CNMG 12 04 08-PM', shev:'open', ghead:'tool', editBtn:'compTool', lock:true, pinnable:true, opts:CATALOG.turret.tool},
         {label:'Diameter', ctl:'readonly', val:'12.7 mm', indent:1, gchild:'tool', nomore:true},
         {label:'Length (L)', ctl:'readonly', val:'12.9 mm', indent:1, gchild:'tool', nomore:true},
         {label:'Working length (WL)', ctl:'readonly', val:'4.0 mm', indent:1, gchild:'tool', nomore:true},
-        {label:'Adapter', ctl:'dropdown', val:'DCLNR 2020K 12', shev:'open', ghead:'adapter', editBtn:'compAdapter', lock:true, opts:HOLDER_OPTS},
+        {label:'Adapter', ctl:'dropdown', val:'DCLNR 2020K 12', shev:'open', ghead:'adapter', editBtn:'compAdapter', lock:true, pinnable:true, opts:CATALOG.turret.adapter},
         {label:'Holder length', ctl:'readonly', val:'125 mm', indent:1, gchild:'adapter', nomore:true},
-        {type:'divider'},
-        {type:'refhead', text:'Used in operations'},
-        {type:'opitem', val:'Operation 1'},
-        {type:'opitem', val:'Operation 2'},
-        {type:'opitem', val:'Operation 4'}
+        {label:'Adapter 2', ctl:'dropdown', val:'VDI 40 — DIN 69880', shev:'open', ghead:'adapter2', editBtn:'compAdapter', lock:true, pinnable:true, opts:CATALOG.turret.adapter2},
+        {label:'Coupling length', ctl:'readonly', val:'63 mm', indent:1, gchild:'adapter2', nomore:true}
       ],
       /* edit-tool content: setup/station params + tool filters (params), then divider, then results list */
       tool:[
@@ -441,7 +490,8 @@
                 '<span class="dropdown duo-b"'+optsB+'><span class="v">'+p.val2+'</span><img class="i16" src="'+A.ddchev+'"></span>';
     }
     var trail;
-    if(p.editBtn)      trail = '<button class="rowbtn'+(editComp && editComp===p.ghead ? ' on' : '')+'" data-act="'+p.editBtn+'" title="Редактировать">'+SVG_EDIT+'</button>';
+    if(p.pinnable)     trail = '<button class="rowbtn pinbtn'+(p.pinned?' on':'')+'" title="'+(p.pinned?'Открепить компонент':'Зафиксировать компонент')+'">'+(p.pinned?SVG_LOCK:SVG_LOCK_OPEN)+'</button>';
+    else if(p.editBtn) trail = '<button class="rowbtn'+(editComp && editComp===p.ghead ? ' on' : '')+'" data-act="'+p.editBtn+'" title="Редактировать">'+SVG_EDIT+'</button>';
     else if(p.plus)    trail = '<button class="rowbtn" title="Добавить точку">'+SVG_PLUS+'</button>';
     else if(p.minus)   trail = '<button class="rowbtn" title="Удалить">'+SVG_MINUS+'</button>';
     else               trail = p.nomore ? '' : '<img class="icn11" src="'+A.icn11+'">';
@@ -459,17 +509,18 @@
   var toolPickIdx = 0; // keyboard-focused row index in the pickAssembly list (flat across groups)
   var toolLibIdx  = 0; // keyboard-focused row index in the editTool library-tools list
   var editComp = null; // null | 'tool' | 'adapter' — which component's params are being edited (within editAssembly)
-  var toolCollapsed = {tool:true, adapter:true}; // assembly groups collapsed by default
+  var toolCollapsed = {tool:true, adapter:true, adapter2:true}; // assembly groups collapsed by default
+  /* Saved assemblies (presets). Each carries a full composition so picking one fills the inspector. */
   var TOOL_ASSEMBLIES = [
     {group:'Turret', items:[
-      'CNMG-12 04 08-WF/DCLNR-2020K-12',
-      'C6-DVJNR-45065-16C1 Axial block',
-      'C6-DCLNR-45065-16B1 Turn block'
+      {name:'CNMG / DCLNR — external roughing', station:'Turret', position:'1', tool:'CNMG 12 04 08-PM', adapter:'DCLNR 2020K 12', adapter2:'VDI 40 — DIN 69880'},
+      {name:'VNMG / SVJBR — finishing',         station:'Turret', position:'2', tool:'VNMG 16 04 08-MF', adapter:'SVJBR 2020K 16', adapter2:'BMT65 turret block'},
+      {name:'TNMG / MTJNR — profiling',         station:'Turret', position:'3', tool:'TNMG 16 04 08-PR', adapter:'MTJNR 2020K 16', adapter2:'VDI 30 — DIN 69880'}
     ]},
     {group:'Spindle', items:[
-      'Drill D10 L72580127 Axial drill block',
-      'C2R-BR25-LH25DF1 Boring bar',
-      'External Turn 25x25'
+      {name:'Drill Ø10 / ER32 — axial drilling', station:'Spindle', position:'1', tool:'Drill Ø10 HSS-Co',     adapter:'ER32 collet chuck', adapter2:'Capto C6'},
+      {name:'End mill Ø16 / Weldon — milling',   station:'Spindle', position:'2', tool:'End mill Ø16 3FL',     adapter:'Weldon Ø16',        adapter2:'HSK-A63'},
+      {name:'Boring bar A20 / boring head',      station:'Spindle', position:'3', tool:'Boring bar A20-SCLCR', adapter:'Boring head 20–40', adapter2:'Capto C6'}
     ]}
   ];
   var SVG_EDIT = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"><path d="M10.4 3.1l2.5 2.5M2.7 11.2l7.7-7.7 2.5 2.5-7.7 7.7-3 .5.5-3z"/></svg>';
@@ -478,24 +529,26 @@
   var SVG_SLIDERS = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M5 3.5v2.4M5 9.6v3M11 3.5v5.9M11 12.6v0"/><circle cx="5" cy="7.7" r="1.5" fill="currentColor" stroke="none"/><circle cx="11" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>';
   var SVG_CHECK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>';
   var SVG_BACK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5L5 8l4.5 4.5"/></svg>';
+  var SVG_LOCK = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><rect x="3.5" y="7" width="9" height="6" rx="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7"/></svg>';
+  var SVG_LOCK_OPEN = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><rect x="3.5" y="7" width="9" height="6" rx="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 4.9-.55"/></svg>';
 
   function toolActions(){
     if(toolState==='pickAssembly' || toolState==='editTool')
       return '<button class="tact tback" data-act="backPick" title="Назад">'+SVG_BACK+'<span>Back</span></button>';
-    return toolState==='view'
-      ? '<button class="tact ticn" data-act="editToolMode" title="Редактировать сборку">'+SVG_EDIT+'</button>'+
-        '<button class="tact ticn" data-act="addAsm" title="Создать новую сборку">'+SVG_PLUS+'</button>'
-      : '<button class="tact cancel" data-act="cancel">Cancel</button><button class="tact apply" data-act="apply">Apply</button>';
+    /* view & editAssembly: Edit toggles in-place editing (changes apply live, no Apply); '+' creates a new assembly */
+    var editOn = toolState==='editAssembly';
+    return '<button class="tact ticn'+(editOn?' on':'')+'" data-act="editToolMode" title="Редактировать сборку">'+SVG_EDIT+'</button>'+
+           '<button class="tact ticn" data-act="addAsm" title="Создать новую сборку">'+SVG_PLUS+'</button>';
   }
   function selectorRow(withEdit){
     var r = document.createElement('div');
     r.className = 'tool-sel';
     r.innerHTML =
-      '<span class="dropdown selbox" data-act="pickAsm"><span class="v">'+PARAMS.Tool.head+'</span><img class="i16" src="'+A.ddchev+'"></span>'+
+      '<span class="dropdown selbox"><span class="v">'+PARAMS.Tool.head+'</span><img class="i16" src="'+A.ddchev+'"></span>'+
       (withEdit ? '<button class="edittool" data-act="editAsm" title="Редактировать сборку">'+SVG_EDIT+'</button>' : '');
     return r;
   }
-  function pickItemsFlat(){ var a = []; TOOL_ASSEMBLIES.forEach(function(g){ g.items.forEach(function(o){ a.push(o); }); }); return a; }
+  function pickItemsFlat(){ var a = []; TOOL_ASSEMBLIES.forEach(function(g){ g.items.forEach(function(o){ a.push(o.name); }); }); return a; }
   function libItemsFlat(){ return PARAMS.Tool.tool.filter(function(p){ return p.type==='listitem'; }).map(function(p){ return p.val; }); }
   function pickList(){
     var wrap = document.createElement('div');
@@ -507,11 +560,11 @@
       var tn = 0;
       g.items.forEach(function(o){
         tn++; fi++;
-        var on = (o===PARAMS.Tool.head);
+        var on = (o.name===PARAMS.Tool.head);
         var active = (fi===toolPickIdx);
-        html += '<div class="ilist-item asm-item'+(on?' cur':'')+(active?' active':'')+'" data-asm="'+o.replace(/"/g,'&quot;')+'" data-idx="'+fi+'">'+
+        html += '<div class="ilist-item asm-item'+(on?' cur':'')+(active?' active':'')+'" data-asm="'+o.name.replace(/"/g,'&quot;')+'" data-idx="'+fi+'">'+
                   '<span class="dd-pre">T#'+tn+'</span>'+
-                  '<span class="asm-name">'+o+'</span>'+
+                  '<span class="asm-name">'+o.name+'</span>'+
                   '<span class="asm-cur">'+(on?SVG_CHECK:'')+'</span></div>';
       });
     });
@@ -539,13 +592,45 @@
     irows.appendChild(selectorRow(false)); /* edit pencil hidden for now (editAssembly still reachable in code) */
     var d = document.createElement('div'); d.className = 'line'; irows.appendChild(d);
     PARAMS.Tool.assembly.forEach(function(p){
-      // a component's read-only sub-params become editable inputs while that component is being edited
-      var pp = (p.ctl==='readonly' && editComp && p.gchild===editComp) ? Object.assign({}, p, {ctl:'input'}) : p;
+      // edit mode (editAssembly): Tool/Adapter turn into plain active comboboxes; their child params stay read-only
+      var pp = (toolState==='editAssembly' && p.editBtn) ? Object.assign({}, p, {editBtn:null, nomore:true}) : p;
       irows.appendChild(buildRow(pp));
     });
   }
   function gotoTool(s){ if(s==='editTool' || s==='pickAssembly') toolPrev = toolState; editComp = null; toolState = s; renderToolTab(); }
   function toolRow(arr, label){ for(var i=0;i<arr.length;i++){ if(arr[i].label===label) return arr[i]; } return null; }
+  /* ---------- Auto-pick: changing one component re-picks compatible partners (pinned ones are never touched) ---------- */
+  function mKey(name){ return (META[name]||{}).k; }
+  function pickByKey(list, key){ for(var i=0;i<list.length;i++){ if(mKey(list[i])===key) return list[i]; } return list[0]; }
+  function stationKind(v){ return (v==='Spindle' || v==='Sub-spindle') ? 'spindle' : 'turret'; }
+  function asmRow(label){ return toolRow(PARAMS.Tool.assembly, label); }
+  function setRowVal(label, val){ var r=asmRow(label); if(r) r.val = val; }
+  function refreshChildren(){ /* pull read-only child dims from the selected component's metadata */
+    var t = META[asmRow('Tool').val]||{};
+    setRowVal('Diameter', t.d||'—'); setRowVal('Length (L)', t.l||'—'); setRowVal('Working length (WL)', t.wl||'—');
+    setRowVal('Holder length', (META[asmRow('Adapter').val]||{}).holder||'—');
+    setRowVal('Coupling length', (META[asmRow('Adapter 2').val]||{}).coupling||'—');
+  }
+  function reconcileAssembly(changed){
+    var st=asmRow('Station'), tool=asmRow('Tool'), ad=asmRow('Adapter'), a2=asmRow('Adapter 2');
+    var kind=stationKind(st.val), c=CATALOG[kind];
+    tool.opts=c.tool; ad.opts=c.adapter; a2.opts=c.adapter2;            // filter lists by Station
+    if(changed==='Station'){                                            // switched magazine kind → bring non-pinned parts into the new catalog
+      if(!tool.pinned && c.tool.indexOf(tool.val)<0) tool.val=c.def.tool;
+      if(!ad.pinned   && c.adapter.indexOf(ad.val)<0) ad.val=c.def.adapter;
+      if(!a2.pinned   && c.adapter2.indexOf(a2.val)<0) a2.val=c.def.adapter2;
+    }
+    if(changed==='Tool' && !ad.pinned && mKey(ad.val)!==mKey(tool.val)) ad.val=pickByKey(c.adapter, mKey(tool.val));
+    if(changed==='Adapter' && !tool.pinned && mKey(tool.val)!==mKey(ad.val)) tool.val=pickByKey(c.tool, mKey(ad.val));
+    refreshChildren();
+  }
+  /* pick a saved assembly preset → fill the whole composition (Station/Tool/Adapter/Adapter 2) */
+  function applyAssembly(p){
+    setRowVal('Tool', p.tool); setRowVal('Adapter', p.adapter); setRowVal('Adapter 2', p.adapter2);
+    var st=asmRow('Station'); st.val=p.station; if(p.position) st.val2=p.position;
+    PARAMS.Tool.head = p.name;
+    reconcileAssembly('Station'); // resync option lists (by station) + child dims; preset values already match the catalog
+  }
   /* enter build/pick mode: '+' bumps the Station position to the next one, 'edit' keeps the current one */
   function enterBuild(increment){
     var aSt = toolRow(PARAMS.Tool.assembly, 'Station');
@@ -587,7 +672,7 @@
     else if(a==='pickAsm'){ toolPickIdx = Math.max(0, pickItemsFlat().indexOf(PARAMS.Tool.head)); gotoTool('pickAssembly'); focusPickRow(); } /* full-panel picker, focus current */
     else if(a==='backPick') gotoTool(toolPrev||'view');    /* back from picker without changing selection */
     else if(a==='addAsm') enterBuild(true);                /* create new assembly → next Station position */
-    else if(a==='editToolMode') enterBuild(false);         /* edit current assembly → keep Station position */
+    else if(a==='editToolMode') gotoTool(toolState==='editAssembly' ? 'view' : 'editAssembly'); /* toggle in-place edit */
     else if(a==='compTool'){ editComp='tool'; toolCollapsed.tool=false; renderToolTab(); }       /* edit tool params */
     else if(a==='compAdapter'){ editComp='adapter'; toolCollapsed.adapter=false; renderToolTab(); } /* edit adapter params */
     else if(a==='cancel' || a==='apply'){
@@ -625,16 +710,54 @@
   irows.addEventListener('click', function(e){
     var tgl = e.target.closest('.tgl');
     if(tgl){ e.stopPropagation(); var on = tgl.classList.toggle('on'); tgl.src = on ? A['tgl-on'] : A['tgl-off']; return; }
-    /* .selbox is not a menu anymore — it navigates to the full-panel picker (data-act=pickAsm), so let it bubble */
-    var dd = e.target.closest('.dropdown:not(.selbox)');
+    var pin = e.target.closest('.pinbtn');
+    if(pin){
+      e.stopPropagation();
+      var prow = pin.closest('.irow'), plbl = prow && prow.querySelector('.rlabel span').textContent;
+      var pe = plbl && toolRow(PARAMS.Tool.assembly, plbl);
+      if(pe){ pe.pinned = !pe.pinned; renderToolTab(); }
+      return;
+    }
+    var dd = e.target.closest('.dropdown');
     if(dd){
       e.stopPropagation();
       if(openMenu && openMenu._owner === dd){ closeMenu(); return; }
-      var v = dd.querySelector('.v');
-      var opts = dd.dataset.opts ? dd.dataset.opts.split('|') : DD_OPTS.slice();
-      if(opts.indexOf(v.textContent) < 0) opts = [v.textContent].concat(opts);
-      var items = opts.map(function(o){ return {label:o, cur:o===v.textContent, onPick:function(){ v.textContent=o; }}; });
-      showMenu(dd.getBoundingClientRect(), items, dd, dd.getBoundingClientRect().width);
+      var rect = dd.getBoundingClientRect(), items;
+      if(dd.classList.contains('selbox')){
+        /* assembly selector behaves as a plain combobox: grouped (Turret/Spindle) menu, pick applies in place */
+        items = [];
+        TOOL_ASSEMBLIES.forEach(function(g, gi){
+          if(gi>0) items.push({sep:true});
+          items.push({head:g.group});
+          var tn = 0;
+          g.items.forEach(function(o){
+            tn++;
+            var on = (o.name===PARAMS.Tool.head);
+            items.push({pre:'T#'+tn, label:o.name, cur:on, check:on, onPick:function(){ applyAssembly(o); renderToolTab(); }});
+          });
+        });
+      } else {
+        var v = dd.querySelector('.v');
+        var opts = dd.dataset.opts ? dd.dataset.opts.split('|') : DD_OPTS.slice();
+        if(opts.indexOf(v.textContent) < 0) opts = [v.textContent].concat(opts);
+        var lrow = dd.closest('.irow'), lblEl = lrow && lrow.querySelector('.rlabel span');
+        var pLabel = lblEl ? lblEl.textContent : null, isDuoB = dd.classList.contains('duo-b');
+        items = opts.map(function(o){ return {label:o, cur:o===v.textContent, onPick:function(){
+          v.textContent = o;
+          /* Tool tab assembly edits apply live (no Apply): persist back to the data model */
+          if(inspTitle.textContent==='Tool' && (toolState==='view' || toolState==='editAssembly') && pLabel){
+            var entry = toolRow(PARAMS.Tool.assembly, pLabel);
+            if(entry){
+              if(isDuoB) entry.val2 = o; else entry.val = o;
+              /* composition change → auto-pick compatible partners + re-filter lists, then re-render */
+              if(!isDuoB && (pLabel==='Station' || pLabel==='Tool' || pLabel==='Adapter' || pLabel==='Adapter 2')){
+                reconcileAssembly(pLabel); renderToolTab();
+              }
+            }
+          }
+        }}; });
+      }
+      showMenu(rect, items, dd, rect.width);
       return;
     }
     var gshev = e.target.closest('.shev.exp');
@@ -679,6 +802,7 @@
     if(row){ irows.querySelectorAll('.irow').forEach(function(x){x.classList.remove('sel');}); row.classList.add('sel'); }
   });
 
+  reconcileAssembly('Station'); // seed option lists + child dims from the catalog
   renderInspector('Tool'); // initial
 })();
 </script>
