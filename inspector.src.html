@@ -109,6 +109,13 @@
   .gnode.locked svg{display:block;}
   .icap{padding:2px 4px 2px 28px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
   .sel-hint{padding:2px 8px 4px;color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
+  /* pinned footer: operations + live overhang, full width at the panel bottom regardless of scroll */
+  .inspfoot{flex:0 0 auto;}
+  .sel-foot{display:flex;align-items:center;gap:10px;padding:7px 8px 3px;
+    border-top:1px solid var(--ec-fg-8);
+    color:var(--ec-fg-56);font:400 12px/16px var(--ec-font);}
+  .sel-foot .sb-sep{flex:0 0 1px;width:1px;height:11px;background:var(--ec-fg-16);}
+  .sel-foot b{font-weight:600;color:var(--ec-fg-100);}
   .search-row{display:flex;padding:2px;}
   .search-box{flex:1 1 0;padding:0;}
   .search-row .filterbtn{flex:0 0 24px;width:24px;height:24px;margin-left:4px;}
@@ -244,6 +251,7 @@
         <div class="title-row"><span class="t" id="inspTitle">Tool</span><span class="title-ctl" id="titleCtl"></span></div>
         <div class="line"></div>
         <div class="irows" id="irows"></div>
+        <div class="inspfoot" id="inspFoot"></div>
       </div>
     </section>
 
@@ -439,6 +447,7 @@
   };
   var DD_OPTS = ['Text for example','Linear','Radial','Spiral','None'];
   var irows = document.getElementById('irows');
+  var inspFoot = document.getElementById('inspFoot');
   var inspTitle = document.getElementById('inspTitle');
 
   function shevSrc(kind){ return kind==='leaf' ? A['shev-leaf'] : kind==='right' ? A['shev-right'] : A['shev-open']; }
@@ -603,10 +612,22 @@
   }
   function pickItemsFlat(){ var a = []; TOOL_ASSEMBLIES.forEach(function(g){ g.items.forEach(function(o){ a.push(o.name); }); }); return a; }
   function findPreset(name){ for(var g=0;g<TOOL_ASSEMBLIES.length;g++){ var it=TOOL_ASSEMBLIES[g].items; for(var i=0;i<it.length;i++){ if(it[i].name===name) return it[i]; } } return null; }
-  function selHint(){ /* caption under the selector: how many operations reuse this assembly */
+  function mmVal(s){ var m = /([\d.]+)/.exec(s||''); return m ? parseFloat(m[1]) : 0; } /* numeric mm from a "125 mm" string */
+  function totalOverhang(){ /* full tool projection from the spindle: stacks tool + holder + coupling + extension; recomputes as the assembly changes */
+    var t  = META[asmRow('Tool').val]      || {};
+    var a1 = META[asmRow('Adapter 1').val] || {};
+    var a2 = META[asmRow('Adapter 2').val] || {};
+    var a3 = META[asmRow('Adapter 3').val] || {};
+    return Math.round(mmVal(t.l) + mmVal(a1.holder) + mmVal(a2.coupling) + mmVal(a3.ext));
+  }
+  function selHint(){ /* chip under the selector: operations reusing this assembly + live total overhang, one line via a divider */
     var p = findPreset(PARAMS.Tool.head), n = (p && p.ops) || 0;
-    var el = document.createElement('div'); el.className = 'sel-hint';
-    el.textContent = n ? ('Used in '+n+' operation'+(n===1?'':'s')) : 'Not used in operations';
+    var el = document.createElement('div'); el.className = 'sel-foot';
+    var ops = n ? ('Used in '+n+' operation'+(n===1?'':'s')) : 'Not used in operations';
+    el.innerHTML =
+      '<span class="sb-item">'+ops+'</span>'+
+      '<i class="sb-sep"></i>'+
+      '<span class="sb-item">Overhang <b>'+totalOverhang()+' mm</b></span>';
     return el;
   }
   function libItemsFlat(){ return LIBRARY.map(function(it){ return it.name; }); }
@@ -655,6 +676,7 @@
   function renderToolTab(){
     titleCtl.innerHTML = toolActions();
     irows.innerHTML = '';
+    inspFoot.innerHTML = ''; // footer only shows for the assembly view
     irows.classList.remove('ro'); // assembly composition is always editable
     if(toolState==='pickAssembly'){ irows.appendChild(pickList()); return; }
     if(toolState==='editTool'){
@@ -671,13 +693,13 @@
       return;
     }
     irows.appendChild(selectorRow(false));
-    irows.appendChild(selHint()); /* "Used in N operations" */
     var d = document.createElement('div'); d.className = 'line'; irows.appendChild(d);
     PARAMS.Tool.assembly.forEach(function(p){
       var rw = buildRow(p);
       if(rw.classList.contains('irow')) rw.classList.add('comp'); /* left gutter for the stack graph */
       irows.appendChild(rw);
     });
+    inspFoot.appendChild(selHint()); /* pinned footer: operations + live overhang */
   }
   function gotoTool(s){ if(s==='editTool' || s==='pickAssembly') toolPrev = toolState; editComp = null; toolState = s; renderToolTab(); }
   function toolRow(arr, label){ for(var i=0;i<arr.length;i++){ if(arr[i].label===label) return arr[i]; } return null; }
@@ -740,6 +762,7 @@
   function renderInspector(tab){
     if(tab==='Tool'){ renderToolTab(); return; }
     titleCtl.innerHTML = '';
+    inspFoot.innerHTML = '';
     irows.classList.remove('ro');
     var cfg = PARAMS[tab] || [];
     var list = Array.isArray(cfg) ? cfg : (cfg.rows || []);
